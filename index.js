@@ -94,4 +94,5 @@ serve({
   console.log(`Server is running on http://localhost:${PORT}`)
 })
 
-module.exports = app
+// Change module.exports to ES module export
+export { app }
