@@ -68,25 +68,10 @@ app.get("/", (c) => c.json({ status: "Server is running" }))
 if (process.env.NODE_ENV === 'development') {
   serve({
     fetch: app.fetch,
-    port: process.env.PORT || 5000
+    port: PORT
+  }, () => {
+    console.log(`Server is running on http://localhost:${PORT}`)
   })
-}
-
-// Vercel handler
-export default async function handler(req, res) {
-  try {
-    const honoRequest = createHonoRequest(req)
-    const response = await app.fetch(honoRequest)
-    return response
-  } catch (error) {
-    return new Response(JSON.stringify({
-      success: false,
-      message: 'Internal Server Error'
-    }), {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    })
-  }
-}
+  
+ 
+export default app
