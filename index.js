@@ -14,22 +14,21 @@ import paymentRoutes from "./src/routes/payment.routes.js"
 import { errorHandler } from "./src/middlewares/error.middleware.js"
 import { swaggerSpec } from './src/config/swagger.js'
 
-// Initialize Hono app
 const app = new Hono()
 
-// Convert Vercel request to Hono compatible request
-const createHonoRequest = (req) => {
-  const url = new URL(req.url)
-  return new Request(url, {
-    method: req.method,
-    headers: req.headers,
-    body: req.body
-  })
+// Database connection with retry mechanism
+const connectWithRetry = async () => {
+  try {
+    await connectDB()
+    console.log('MongoDB Connected')
+  } catch (err) {
+    console.error('MongoDB connection error:', err)
+    return null
+  }
 }
 
 // Middlewares
 app.use('*', async (c, next) => {
-  // Ensure MongoDB connection
   if (!global.mongoConnected) {
     await connectWithRetry()
     global.mongoConnected = true
@@ -40,15 +39,6 @@ app.use('*', async (c, next) => {
 app.use("*", logger())
 app.use("*", cors())
 app.use("*", secureHeaders())
-
-// Connect DB before handling routes
-app.use('*', async (c, next) => {
-  if (!global.mongoConnected) {
-    await connectWithRetry()
-    global.mongoConnected = true
-  }
-  await next()
-})
 
 // Routes
 app.route("/api/auth", authRoutes)
@@ -64,14 +54,44 @@ app.use("*", errorHandler)
 // Health check route
 app.get("/", (c) => c.json({ status: "Server is running" }))
 
-// Development server
-if (process.env.NODE_ENV === 'development') {
-  serve({
-    fetch: app.fetch,
-    port: PORT
-  }, () => {
-    console.log(`Server is running on http://localhost:${PORT}`)
-  })
-  
- 
-export default app
+// Swagger documentation routes
+app.get('/api-docs', async (c) => {
+  return c.html(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="description" content="SwaggerUI" />
+        <title>Brevio API Documentation</title>
+        <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@latest/swagger-ui.css" />
+    </head>
+    <body>
+        <div id="swagger-ui"></div>
+        <script src="https://unpkg.com/swagger-ui-dist@latest/swagger-ui-bundle.js" crossorigin></script>
+        <script>
+            window.onload = () => {
+                window.ui = SwaggerUIBundle({
+                    url: '/api-docs/swagger.json',
+                    dom_id: '#swagger-ui',
+                });
+            };
+        </script>
+    </body>
+    </html>
+  `)
+})
+
+app.get('/api-docs/swagger.json', (c) => {
+  return c.json(swaggerSpec)
+})
+
+const PORT = process.env.PORT || 5000
+serve({
+  fetch: app.fetch,
+  port: PORT
+}, () => {
+  console.log(`Server is running on http://localhost:${PORT}`)
+})
+
+module.exports = app
