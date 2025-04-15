@@ -6,6 +6,7 @@ import {
   signInWithCredential,
   FacebookAuthProvider,
 } from "firebase/auth"
+// Change the import to match the export
 import { auth } from "../config/firebase.js"
 import User, { UserRole } from "../models/user.model.js"
 import { createStripeCustomer } from "../services/stripe.service.js"

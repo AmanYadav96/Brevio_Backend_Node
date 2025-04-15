@@ -18,7 +18,7 @@ import { swaggerSpec } from './src/config/swagger.js'
 const app = new Hono()
 
 // Connect to MongoDB
-connectDB()
+await connectDB()
 
 // Vercel adapter middleware
 const vercelAdapter = async (c, next) => {
@@ -38,13 +38,20 @@ const vercelAdapter = async (c, next) => {
 app.use('*', vercelAdapter)
 
 // Regular middleware
+app.use('*', async (c, next) => {
+  try {
+    await next()
+  } catch (err) {
+    console.error('Error:', err)
+    return c.json({ 
+      success: false, 
+      message: err.message || 'Internal server error' 
+    }, 500)
+  }
+})
+
 app.use("*", logger())
-app.use("*", cors({
-  origin: '*',
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization'],
-  exposeHeaders: ['Content-Length', 'X-Requested-With']
-}))
+app.use("*", cors())
 app.use("*", secureHeaders())
 
 // Swagger endpoints
@@ -106,14 +113,16 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Export for Vercel
 // Development server
-if (process.env.NODE_ENV !== 'production') {
+if (process.env.NODE_ENV === 'development') {
   serve({
     fetch: app.fetch,
     port: process.env.PORT || 5000
   })
 }
 
-// Vercel handler
-export default async function (req) {
-  return app.fetch(req)
+// Vercel serverless function
+const handler = async (request, response) => {
+  return app.fetch(request)
 }
+
+export default handler
