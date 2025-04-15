@@ -1,5 +1,4 @@
 import swaggerJsdoc from 'swagger-jsdoc'
-import '../docs/genre.docs.js'  // Add this line with other doc imports
 
 const options = {
   definition: {
@@ -11,7 +10,7 @@ const options = {
     }
   },
   apis: [
-    './src/docs/*.js'  // Make sure this pattern matches your docs location
+    './src/docs/*.js'  // This will include all .js files in the docs folder
   ]
 }
 
