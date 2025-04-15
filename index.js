@@ -17,7 +17,22 @@ import { swaggerSpec } from './src/config/swagger.js'
 // Initialize Hono app
 const app = new Hono()
 
-// Database connection with retry mechanism
+// Vercel headers middleware
+app.use('*', async (c, next) => {
+  if (process.env.VERCEL) {
+    const req = c.req.raw
+    const headers = new Headers()
+    Object.entries(req.headers).forEach(([key, value]) => {
+      if (typeof value === 'string') {
+        headers.set(key, value)
+      }
+    })
+    c.req.raw.headers = headers
+  }
+  await next()
+})
+
+// Database connection
 const connectWithRetry = async () => {
   try {
     await connectDB()
@@ -28,9 +43,22 @@ const connectWithRetry = async () => {
   }
 }
 
-// Middlewares
+// Connect DB middleware
+app.use('*', async (c, next) => {
+  if (!global.mongoConnected) {
+    await connectWithRetry()
+    global.mongoConnected = true
+  }
+  await next()
+})
+
+// Standard middleware
 app.use("*", logger())
-app.use("*", cors())
+app.use("*", cors({
+  origin: '*',
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization']
+}))
 app.use("*", secureHeaders())
 
 // Connect DB before handling routes
@@ -67,10 +95,5 @@ if (process.env.NODE_ENV === 'development') {
 
 // Vercel serverless function handler
 export default async function handler(request) {
-  if (!global.mongoConnected) {
-    await connectWithRetry()
-    global.mongoConnected = true
-  }
-  
   return app.fetch(request)
 }
