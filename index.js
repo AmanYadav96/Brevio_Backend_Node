@@ -3,6 +3,7 @@ import { cors } from "hono/cors"
 import 'dotenv/config'
 import { logger } from "hono/logger"
 import { secureHeaders } from "hono/secure-headers"
+import { serve } from '@hono/node-server'
 import { connectDB } from "./src/config/database.js"
 import authRoutes from "./src/routes/auth.routes.js"
 import userRoutes from "./src/routes/user.routes.js"
@@ -58,35 +59,18 @@ app.get("/", (c) => c.json({ status: "Server is running" }))
 // Development server
 if (process.env.NODE_ENV === 'development') {
   const PORT = process.env.PORT || 5000
-  console.log(`Server is running on port ${PORT}`)
   serve({
     fetch: app.fetch,
     port: PORT
   })
 }
 
-// Export for Vercel
-export default {
-  fetch: async (req, ...args) => {
-    // Set longer timeout for Vercel
-    const timeout = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Request timeout')), 9000)
-    )
-    
-    try {
-      const res = await Promise.race([
-        app.fetch(req, ...args),
-        timeout
-      ])
-      return res
-    } catch (error) {
-      return new Response(JSON.stringify({
-        success: false,
-        message: 'Service temporarily unavailable'
-      }), {
-        status: 503,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
+// Vercel serverless function handler
+export default async function handler(request) {
+  if (!global.mongoConnected) {
+    await connectWithRetry()
+    global.mongoConnected = true
   }
+  
+  return app.fetch(request)
 }

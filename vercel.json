@@ -9,16 +9,13 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "index.js",
+      "dest": "/index.js",
+      "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       "headers": {
-        "Access-Control-Allow-Credentials": "true",
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET,OPTIONS,PATCH,DELETE,POST,PUT",
-        "Access-Control-Allow-Headers": "*"
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Methods": "GET,OPTIONS,PATCH,DELETE,POST,PUT"
       }
     }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  }
+  ]
 }
