@@ -13,6 +13,7 @@
     "bcryptjs": "latest",
     "dotenv": "^16.5.0",
     "firebase": "latest",
+    "firebase-admin": "^13.2.0",
     "hono": "latest",
     "mongoose": "latest",
     "my-v0-project": "file:",

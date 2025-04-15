@@ -1,5 +1,6 @@
 import { verify } from "hono/jwt"
 import User from "../models/user.model.js"
+import { auth } from "../config/firebase.js"
 import { AppError } from "../utils/app-error.js"
 
 export const protect = async (c, next) => {
@@ -56,5 +57,33 @@ export const restrictTo = (...roles) => {
       }
       return c.json({ success: false, message: "Not authorized" }, 403)
     }
+  }
+}
+
+// Add this export
+export const adminAuthMiddleware = async (c, next) => {
+  try {
+    const token = c.req.header("Authorization")?.replace("Bearer ", "")
+    
+    if (!token) {
+      throw new AppError("No token provided", 401)
+    }
+
+    try {
+      const decodedToken = await auth.verifyIdToken(token)
+      if (!decodedToken.admin) {
+        throw new AppError("Admin access required", 403)
+      }
+      c.set("user", decodedToken)
+    } catch (error) {
+      throw new AppError("Invalid token", 401)
+    }
+
+    await next()
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error
+    }
+    throw new AppError(error.message, 401)
   }
 }

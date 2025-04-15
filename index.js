@@ -11,6 +11,7 @@ import creatorRoutes from "./src/routes/creator.routes.js"
 import adminRoutes from "./src/routes/admin.routes.js"
 import videoRoutes from "./src/routes/video.routes.js"
 import paymentRoutes from "./src/routes/payment.routes.js"
+import genreRoutes from "./src/routes/genre.routes.js"
 import { errorHandler } from "./src/middlewares/error.middleware.js"
 import { swaggerSpec } from './src/config/swagger.js'
 
@@ -47,6 +48,9 @@ app.route("/api/creators", creatorRoutes)
 app.route("/api/admin", adminRoutes)
 app.route("/api/videos", videoRoutes)
 app.route("/api/payments", paymentRoutes)
+
+// Add this with other routes
+app.route("/api/genres", genreRoutes)
 
 // Error handling middleware
 app.use("*", errorHandler)
