@@ -8,16 +8,13 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/index.js"
-    },
-    {
-      "src": "/api-docs/(.*)",
-      "dest": "/index.js"
-    },
-    {
       "src": "/(.*)",
-      "dest": "/index.js"
+      "dest": "/index.js",
+      "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+      "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "*"
+      }
     }
   ]
 }

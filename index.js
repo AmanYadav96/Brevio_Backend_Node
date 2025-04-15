@@ -3,6 +3,7 @@ import { cors } from "hono/cors"
 import 'dotenv/config'
 import { logger } from "hono/logger"
 import { secureHeaders } from "hono/secure-headers"
+import { serve } from '@hono/node-server'
 import { connectDB } from "./src/config/database.js"
 import authRoutes from "./src/routes/auth.routes.js"
 import userRoutes from "./src/routes/user.routes.js"
@@ -19,7 +20,14 @@ const app = new Hono()
 // Connect to MongoDB
 connectDB()
 
-// Middlewares
+// Middlewares with proper request handling
+app.use("*", async (c, next) => {
+  if (process.env.NODE_ENV === 'production') {
+    // Vercel environment
+    c.req.raw.headers = new Headers(c.req.raw.headers)
+  }
+  await next()
+})
 app.use("*", logger())
 app.use("*", cors())
 app.use("*", secureHeaders())
@@ -70,7 +78,18 @@ app.use("*", errorHandler)
 // Health check route
 app.get("/", (c) => c.json({ status: "Server is running" }))
 
-// Export a serverless function for Vercel
-export default async function handler(request, response) {
-  return app.fetch(request)
+// Conditional server start
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 5000
+  serve({
+    fetch: app.fetch,
+    port: PORT
+  }, () => {
+    console.log(`Server is running on http://localhost:${PORT}`)
+  })
+}
+
+// Export for Vercel
+export default async function handler(req, res) {
+  return app.fetch(req, res)
 }
