@@ -70,8 +70,7 @@ app.use("*", errorHandler)
 // Health check route
 app.get("/", (c) => c.json({ status: "Server is running" }))
 
-// Export the fetch handler for Vercel
-export default {
-  port: process.env.PORT || 5000,
-  fetch: app.fetch
+// Export a serverless function for Vercel
+export default async function handler(request, response) {
+  return app.fetch(request)
 }
