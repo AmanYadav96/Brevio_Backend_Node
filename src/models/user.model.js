@@ -8,6 +8,14 @@ export const UserRole = {
   ADMIN: "admin",
 }
 
+// Add UserStatus enum
+export const UserStatus = {
+  ACTIVE: "active",
+  SUSPENDED: "suspended",
+  INACTIVE: "inactive",
+  PENDING: "pending"
+}
+
 const userSchema = new mongoose.Schema(
   {
     name: {
@@ -46,6 +54,12 @@ const userSchema = new mongoose.Schema(
     stripeCustomerId: {
       type: String,
     },
+    status: {
+      type: String,
+      enum: Object.values(UserStatus),
+      default: UserStatus.ACTIVE,
+    },
+    
     subscriptionStatus: {
       type: String,
       enum: ["active", "canceled", "past_due", "unpaid", "trialing", "none"],
@@ -57,7 +71,7 @@ const userSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  },
+  }
 )
 
 // Hash password before saving

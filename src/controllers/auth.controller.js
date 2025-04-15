@@ -25,7 +25,7 @@ export const register = async (c) => {
     const firebaseUser = await createUserWithEmailAndPassword(auth, email, password)
 
     // Create Stripe customer
-    const stripeCustomer = await createStripeCustomer(email, name)
+    // const stripeCustomer = await createStripeCustomer(email, name)
 
     // Create user in MongoDB
     const user = await User.create({
@@ -33,7 +33,7 @@ export const register = async (c) => {
       email,
       password,
       firebaseUid: firebaseUser.user.uid,
-      stripeCustomerId: stripeCustomer.id,
+      // stripeCustomerId: stripeCustomer.id,
       isEmailVerified: firebaseUser.user.emailVerified,
     })
 

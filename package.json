@@ -8,12 +8,18 @@
     "start": "node index.js"
   },
   "dependencies": {
+    "@hono/node-server": "^1.14.1",
+    "@hono/swagger-ui": "^0.5.1",
     "bcryptjs": "latest",
+    "dotenv": "^16.5.0",
     "firebase": "latest",
     "hono": "latest",
     "mongoose": "latest",
+    "my-v0-project": "file:",
     "nodemon": "^3.1.9",
     "stripe": "latest",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {

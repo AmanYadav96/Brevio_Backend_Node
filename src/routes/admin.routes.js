@@ -1,12 +1,24 @@
 import { Hono } from "hono"
 import { protect, restrictTo } from "../middlewares/auth.middleware.js"
-import { UserRole } from "../models/user.model.js"
+import {
+  getAllUsers,
+  getUser,
+  updateUser,
+  deleteUser,
+  getUserStats
+} from "../controllers/user.controller.js"
 
 const router = new Hono()
 
-// Protected routes for admins
-router.get("/dashboard", protect, restrictTo(UserRole.ADMIN), (c) => {
-  return c.json({ message: "Admin dashboard route" })
-})
+// Protect all routes and restrict to admin
+router.use("*", protect)
+router.use("*", restrictTo("admin"))
+
+// User management routes
+router.get("/users", getAllUsers)
+router.get("/users/stats", getUserStats)
+router.get("/users/:id", getUser)
+router.put("/users/:id", updateUser)
+router.delete("/users/:id", deleteUser)
 
 export default router
