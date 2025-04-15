@@ -20,16 +20,31 @@ const app = new Hono()
 // Connect to MongoDB
 connectDB()
 
-// Middlewares with proper request handling
-app.use("*", async (c, next) => {
-  if (process.env.NODE_ENV === 'production') {
-    // Vercel environment
-    c.req.raw.headers = new Headers(c.req.raw.headers)
+// Vercel adapter middleware
+const vercelAdapter = async (c, next) => {
+  if (process.env.VERCEL) {
+    const req = c.req.raw
+    // Convert headers to Hono-compatible format
+    const headers = new Headers()
+    for (const [key, value] of Object.entries(req.headers)) {
+      headers.set(key, value)
+    }
+    c.req.raw.headers = headers
   }
   await next()
-})
+}
+
+// Apply adapter before other middleware
+app.use('*', vercelAdapter)
+
+// Regular middleware
 app.use("*", logger())
-app.use("*", cors())
+app.use("*", cors({
+  origin: '*',
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+  exposeHeaders: ['Content-Length', 'X-Requested-With']
+}))
 app.use("*", secureHeaders())
 
 // Swagger endpoints
@@ -90,6 +105,15 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Export for Vercel
-export default async function handler(req, res) {
-  return app.fetch(req, res)
+// Development server
+if (process.env.NODE_ENV !== 'production') {
+  serve({
+    fetch: app.fetch,
+    port: process.env.PORT || 5000
+  })
+}
+
+// Vercel handler
+export default async function (req) {
+  return app.fetch(req)
 }
