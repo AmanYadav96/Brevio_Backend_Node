@@ -192,3 +192,131 @@ export const searchVideos = async (c) => {
     return c.json({ success: false, message: "Failed to search videos" }, 500)
   }
 }
+
+export const createVideo = async (c) => {
+  try {
+    const uploads = c.get('uploads')
+    const body = await c.req.json()
+
+    if (uploads.thumbnail) {
+      body.thumbnail = uploads.thumbnail
+    }
+    if (uploads.videoFile) {
+      body.videoUrl = uploads.videoFile
+    }
+
+    const video = await Video.create(body)
+    return c.json({ success: true, video }, 201)
+  } catch (error) {
+    console.error("Create video error:", error)
+    return c.json({ success: false, message: "Failed to create video" }, 500)
+  }
+}
+
+export const getAllVideos = async (c) => {
+  try {
+    const page = parseInt(c.req.query('page')) || 1
+    const limit = 10
+    const skip = (page - 1) * limit
+    const search = c.req.query('search') || ''
+    const channel = c.req.query('channel')
+
+    const query = { isActive: true }
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ]
+    }
+    if (channel) query.channel = channel
+
+    const [videos, total] = await Promise.all([
+      Video.find(query)
+        .populate('channel', 'name')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Video.countDocuments(query)
+    ])
+
+    return c.json({
+      success: true,
+      videos,
+      pagination: {
+        total,
+        pages: Math.ceil(total / limit),
+        page,
+        limit
+      }
+    })
+  } catch (error) {
+    console.error("Get videos error:", error)
+    return c.json({ success: false, message: "Failed to fetch videos" }, 500)
+  }
+}
+
+export const getVideo = async (c) => {
+  try {
+    const video = await Video.findById(c.req.param("id"))
+      .populate('channel', 'name')
+      .lean()
+
+    if (!video || !video.isActive) {
+      return c.json({ success: false, message: "Video not found" }, 404)
+    }
+
+    // Increment views
+    await Video.findByIdAndUpdate(video._id, { $inc: { views: 1 } })
+
+    return c.json({ success: true, video })
+  } catch (error) {
+    console.error("Get video error:", error)
+    return c.json({ success: false, message: "Failed to fetch video" }, 500)
+  }
+}
+
+export const updateVideo = async (c) => {
+  try {
+    const uploads = c.get('uploads')
+    const body = await c.req.json()
+
+    if (uploads.thumbnail) {
+      body.thumbnail = uploads.thumbnail
+    }
+    if (uploads.videoFile) {
+      body.videoUrl = uploads.videoFile
+    }
+
+    const video = await Video.findByIdAndUpdate(
+      c.req.param("id"),
+      { $set: body },
+      { new: true, runValidators: true }
+    ).populate('channel', 'name')
+
+    if (!video) {
+      return c.json({ success: false, message: "Video not found" }, 404)
+    }
+    return c.json({ success: true, video })
+  } catch (error) {
+    console.error("Update video error:", error)
+    return c.json({ success: false, message: "Failed to update video" }, 500)
+  }
+}
+
+export const deleteVideo = async (c) => {
+  try {
+    const video = await Video.findByIdAndUpdate(
+      c.req.param("id"),
+      { isActive: false },
+      { new: true }
+    )
+    if (!video) {
+      return c.json({ success: false, message: "Video not found" }, 404)
+    }
+    return c.json({ success: true, message: "Video deleted successfully" })
+  } catch (error) {
+    console.error("Delete video error:", error)
+    return c.json({ success: false, message: "Failed to delete video" }, 500)
+  }
+}

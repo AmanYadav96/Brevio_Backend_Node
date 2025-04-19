@@ -1,17 +1,20 @@
 import { Hono } from "hono"
-import { uploadVideo, publishVideo, getVideos, getVideoById, searchVideos } from "../controllers/video.controller.js"
-import { protect, restrictTo } from "../middlewares/auth.middleware.js"
-import { UserRole } from "../models/user.model.js"
+import { protect } from "../middlewares/auth.middleware.js"
+import { handleUpload } from "../middlewares/upload.middleware.js"
+import {
+  createVideo,
+  getAllVideos,
+  getVideo,
+  updateVideo,
+  deleteVideo
+} from "../controllers/video.controller.js"
 
 const router = new Hono()
 
-// Public routes
-router.get("/", getVideos)
-router.get("/:id", getVideoById)
-router.get("/search", searchVideos)
-
-// Protected routes
-router.post("/", protect, restrictTo(UserRole.CREATOR, UserRole.ADMIN), uploadVideo)
-router.post("/publish", protect, restrictTo(UserRole.CREATOR, UserRole.ADMIN), publishVideo)
+router.get("/", getAllVideos)
+router.get("/:id", getVideo)
+router.post("/", protect, handleUpload('VIDEO'), createVideo)
+router.put("/:id", protect, handleUpload('VIDEO'), updateVideo)
+router.delete("/:id", protect, deleteVideo)
 
 export default router

@@ -8,12 +8,14 @@
     "start": "node index.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.787.0",
     "@hono/node-server": "^1.14.1",
     "@hono/swagger-ui": "^0.5.1",
     "bcryptjs": "latest",
     "dotenv": "^16.5.0",
     "firebase": "latest",
     "firebase-admin": "^13.2.0",
+    "get-video-duration": "^4.1.0",
     "hono": "latest",
     "mongoose": "latest",
     "my-v0-project": "file:",
@@ -21,6 +23,7 @@
     "stripe": "latest",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
+    "uuid": "^11.1.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

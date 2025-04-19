@@ -13,8 +13,11 @@ import videoRoutes from "./src/routes/video.routes.js"
 import paymentRoutes from "./src/routes/payment.routes.js"
 import genreRoutes from "./src/routes/genre.routes.js"
 import subscriptionRoutes from "./src/routes/subscription.routes.js"
+import channelRoutes from "./src/routes/channel.routes.js"
 import { errorHandler } from "./src/middlewares/error.middleware.js"
 import { swaggerSpec } from './src/config/swagger.js'
+import advertisementRoutes from "./src/routes/advertisement.routes.js"
+import uploadRoutes from "./src/routes/upload.routes.js"
 
 const app = new Hono()
 
@@ -49,10 +52,11 @@ app.route("/api/creators", creatorRoutes)
 app.route("/api/admin", adminRoutes)
 app.route("/api/videos", videoRoutes)
 app.route("/api/payments", paymentRoutes)
-
-// Add this with other routes
+app.route("/api/channels", channelRoutes)
 app.route("/api/subscriptions", subscriptionRoutes)
 app.route("/api/genres", genreRoutes)
+app.route("/api/advertisements", advertisementRoutes)
+app.route("/api/upload", uploadRoutes)
 
 // Error handling middleware
 app.use("*", errorHandler)

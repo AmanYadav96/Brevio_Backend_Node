@@ -4,72 +4,46 @@ const videoSchema = new mongoose.Schema(
   {
     title: {
       type: String,
-      required: [true, "Please provide a title"],
-      trim: true,
+      required: [true, "Video title is required"],
+      trim: true
     },
     description: {
       type: String,
-      required: [true, "Please provide a description"],
-      trim: true,
+      required: [true, "Video description is required"],
+      trim: true
     },
-    creator: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
+    thumbnail: {
+      type: String,
+      required: [true, "Video thumbnail is required"]
     },
     videoUrl: {
       type: String,
-      required: [true, "Video URL is required"],
-    },
-    thumbnailUrl: {
-      type: String,
-      required: [true, "Thumbnail URL is required"],
+      required: [true, "Video URL is required"]
     },
     duration: {
       type: Number,
-      default: 0,
-    },
-    isPublished: {
-      type: Boolean,
-      default: false,
-    },
-    isPremium: {
-      type: Boolean,
-      default: false,
+      default: 0
     },
     views: {
       type: Number,
-      default: 0,
+      default: 0
     },
-    likes: {
-      type: Number,
-      default: 0,
+    channel: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Channel',
+      required: true
     },
-    dislikes: {
-      type: Number,
-      default: 0,
+    status: {
+      type: String,
+      enum: ["processing", "published", "failed"],
+      default: "processing"
     },
-    tags: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
-    categories: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
+    isActive: {
+      type: Boolean,
+      default: true
+    }
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true }
 )
 
-// Add text index for search functionality
-videoSchema.index({ title: "text", description: "text", tags: "text" })
-
-const Video = mongoose.model("Video", videoSchema)
-
-export default Video
+export default mongoose.model("Video", videoSchema)
