@@ -2,6 +2,7 @@
 // import './docs/channel.docs.js'
 // import './docs/video.docs.js'
 // import './docs/advertisement.docs.js'
+//import '../docs/content.docs.js'
 import swaggerJsdoc from 'swagger-jsdoc'
 
 const options = {

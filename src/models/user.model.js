@@ -16,12 +16,32 @@ export const UserStatus = {
   PENDING: "pending"
 }
 
+// Auth provider enum
+export const AuthProvider = {
+  LOCAL: "local",
+  GOOGLE: "google",
+  FACEBOOK: "facebook",
+  APPLE: "apple"
+}
+
 const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
       required: [true, "Please provide a name"],
       trim: true,
+    },
+    username: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      lowercase: true,
+    },
+    bio: {
+      type: String,
+      trim: true,
+      maxlength: [500, "Bio cannot be more than 500 characters"]
     },
     email: {
       type: String,
@@ -51,6 +71,30 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    authProvider: {
+      type: String,
+      enum: Object.values(AuthProvider),
+      default: AuthProvider.LOCAL
+    },
+    socialProfiles: {
+      google: {
+        id: String,
+        email: String,
+        name: String,
+        picture: String
+      },
+      facebook: {
+        id: String,
+        email: String,
+        name: String,
+        picture: String
+      },
+      apple: {
+        id: String,
+        email: String,
+        name: String
+      }
+    },
     stripeCustomerId: {
       type: String,
     },
@@ -73,6 +117,14 @@ const userSchema = new mongoose.Schema(
     timestamps: true,
   }
 )
+
+// Make username required for creators
+userSchema.pre("validate", function(next) {
+  if (this.role === UserRole.CREATOR && !this.username) {
+    this.invalidate('username', 'Username is required for creators')
+  }
+  next()
+})
 
 // Hash password before saving
 userSchema.pre("save", async function (next) {

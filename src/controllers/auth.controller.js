@@ -11,102 +11,9 @@ import { auth } from "../config/firebase.js"
 import User, { UserRole } from "../models/user.model.js"
 import { createStripeCustomer } from "../services/stripe.service.js"
 import { AppError } from "../utils/app-error.js"
+import authService from "../services/auth.service.js"
 
-export const register = async (c) => {
-  try {
-    const { name, email, password } = await c.req.json()
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email })
-    if (existingUser) {
-      throw new AppError("User already exists with this email", 400)
-    }
-
-    // Create user in Firebase
-    const firebaseUser = await createUserWithEmailAndPassword(auth, email, password)
-
-    // Create Stripe customer
-    // const stripeCustomer = await createStripeCustomer(email, name)
-
-    // Create user in MongoDB
-    const user = await User.create({
-      name,
-      email,
-      password,
-      firebaseUid: firebaseUser.user.uid,
-      // stripeCustomerId: stripeCustomer.id,
-      isEmailVerified: firebaseUser.user.emailVerified,
-    })
-
-    // Generate JWT token
-    const token = await sign({ id: user._id }, process.env.JWT_SECRET)
-
-    return c.json({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        profilePicture: user.profilePicture,
-      },
-    })
-  } catch (error) {
-    if (error instanceof AppError) {
-      return c.json({ success: false, message: error.message }, error.statusCode)
-    }
-    console.error("Registration error:", error)
-    return c.json({ success: false, message: "Registration failed" }, 500)
-  }
-}
-
-export const login = async (c) => {
-  try {
-    const { email, password } = await c.req.json()
-
-    // Find user in MongoDB
-    const user = await User.findOne({ email }).select("+password")
-    if (!user) {
-      throw new AppError("Invalid credentials", 401)
-    }
-
-    // If user has password (not social login only), verify it
-    if (user.password) {
-      const isMatch = await user.comparePassword(password)
-      if (!isMatch) {
-        throw new AppError("Invalid credentials", 401)
-      }
-    } else {
-      // If user doesn't have a password, they must use social login
-      throw new AppError("Please use social login for this account", 400)
-    }
-
-    // Sign in with Firebase
-    await signInWithEmailAndPassword(auth, email, password)
-
-    // Generate JWT token
-    const token = await sign({ id: user._id }, process.env.JWT_SECRET)
-
-    return c.json({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        profilePicture: user.profilePicture,
-      },
-    })
-  } catch (error) {
-    if (error instanceof AppError) {
-      return c.json({ success: false, message: error.message }, error.statusCode)
-    }
-    console.error("Login error:", error)
-    return c.json({ success: false, message: "Login failed" }, 500)
-  }
-}
 
 export const googleLogin = async (c) => {
   try {
@@ -249,5 +156,100 @@ export const becomeCreator = async (c) => {
     }
     console.error("Become creator error:", error)
     return c.json({ success: false, message: "Failed to become a creator" }, 500)
+  }
+}
+
+// Register with email and password
+export const register = async (c) => {
+  try {
+    const body = await c.req.json()
+    const { user, token } = await authService.registerWithEmail(body)
+    
+    return c.json({
+      success: true,
+      token,
+      user
+    })
+  } catch (error) {
+    return c.json({
+      success: false,
+      message: error.message
+    }, 400)
+  }
+}
+
+// Login with email and password
+export const login = async (c) => {
+  try {
+    const { email, password } = await c.req.json()
+    const { user, token } = await authService.loginWithEmail(email, password)
+    
+    return c.json({
+      success: true,
+      token,
+      user
+    })
+  } catch (error) {
+    return c.json({
+      success: false,
+      message: error.message
+    }, 401)
+  }
+}
+
+// Google authentication
+export const googleAuth = async (c) => {
+  try {
+    const { idToken } = await c.req.json()
+    const { user, token } = await authService.googleAuth(idToken)
+    
+    return c.json({
+      success: true,
+      token,
+      user
+    })
+  } catch (error) {
+    return c.json({
+      success: false,
+      message: error.message
+    }, 400)
+  }
+}
+
+// Facebook authentication
+export const facebookAuth = async (c) => {
+  try {
+    const { accessToken } = await c.req.json()
+    const { user, token } = await authService.facebookAuth(accessToken)
+    
+    return c.json({
+      success: true,
+      token,
+      user
+    })
+  } catch (error) {
+    return c.json({
+      success: false,
+      message: error.message
+    }, 400)
+  }
+}
+
+// Apple authentication
+export const appleAuth = async (c) => {
+  try {
+    const { idToken, userData } = await c.req.json()
+    const { user, token } = await authService.appleAuth(idToken, userData || {})
+    
+    return c.json({
+      success: true,
+      token,
+      user
+    })
+  } catch (error) {
+    return c.json({
+      success: false,
+      message: error.message
+    }, 400)
   }
 }

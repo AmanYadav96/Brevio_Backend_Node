@@ -1,16 +1,21 @@
 import { Hono } from "hono"
-import { register, login, googleLogin, facebookLogin, becomeCreator } from "../controllers/auth.controller.js"
-import { protect } from "../middlewares/auth.middleware.js"
+import { 
+  register, 
+  login, 
+  googleAuth, 
+  facebookAuth, 
+  appleAuth 
+} from "../controllers/auth.controller.js"
 
 const router = new Hono()
 
-// Public routes
+// Email/password authentication
 router.post("/register", register)
 router.post("/login", login)
-router.post("/google", googleLogin)
-router.post("/facebook", facebookLogin)
 
-// Protected routes
-router.post("/become-creator", protect, becomeCreator)
+// Social authentication
+router.post("/google", googleAuth)
+router.post("/facebook", facebookAuth)
+router.post("/apple", appleAuth)
 
 export default router

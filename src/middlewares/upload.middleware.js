@@ -1,7 +1,13 @@
-import { uploadToR2 } from '../utils/cloudStorage.js'
+import path from 'path'
+import fs from 'fs'
+import { v4 as uuidv4 } from 'uuid'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getVideoDurationInSeconds } from 'get-video-duration'
 import File from '../models/file.model.js'
+import FileUpload from '../models/fileUpload.model.js'
+import { uploadToR2 } from '../utils/cloudStorage.js'
 
+// File type and size constraints
 const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp']
 const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/x-matroska', 'video/quicktime']
 const maxFileSize = {
@@ -9,94 +15,17 @@ const maxFileSize = {
   video: 5 * 1024 * 1024 * 1024 // 5GB
 }
 
-export const handleFileUpload = (modelName) => async (c, next) => {
-  try {
-    const formData = await c.req.formData()
-    const uploads = {}
-    const userId = c.get('user')._id
-
-    for (const [key, file] of formData.entries()) {
-      if (file instanceof Blob) {
-        // Create upload tracking record
-        const uploadTracker = await File.create({
-          originalName: file.name,
-          fileType: file.type,
-          fileSize: file.size,
-          uploadedBy: userId,
-          status: 'uploading',
-          progress: 0,
-          usedIn: {
-            model: modelName,
-            documentId: formData.get('id') || 'pending'
-          }
-        })
-
-        // Validate file type with more video formats
-        if (key.includes('video') && !allowedVideoTypes.includes(file.type)) {
-          await File.findByIdAndUpdate(uploadTracker._id, { status: 'failed', error: 'Invalid file type' })
-          return c.json({ 
-            success: false, 
-            message: `Invalid video type. Allowed types: ${allowedVideoTypes.join(', ')}` 
-          }, 400)
-        }
-
-        if (key.includes('image') && !allowedImageTypes.includes(file.type)) {
-          await File.findByIdAndUpdate(uploadTracker._id, { status: 'failed', error: 'Invalid file type' })
-          return c.json({ 
-            success: false, 
-            message: `Invalid image type. Allowed types: ${allowedImageTypes.join(', ')}` 
-          }, 400)
-        }
-
-        // Validate file size
-        const maxSize = key.includes('video') ? maxFileSize.video : maxFileSize.image
-        if (file.size > maxSize) {
-          await File.findByIdAndUpdate(uploadTracker._id, { status: 'failed', error: 'File too large' })
-          return c.json({ 
-            success: false, 
-            message: `File too large. Maximum size: ${maxSize / (1024 * 1024 * 1024)}GB` 
-          }, 400)
-        }
-
-        const fileUrl = await uploadToR2(file, key, userId, modelName, uploadTracker._id)
-        uploads[key] = fileUrl
-      }
-    }
-
-    c.set('uploads', uploads)
-    await next()
-  } catch (error) {
-    console.error('File upload error:', error)
-    return c.json({ success: false, message: "File upload failed" }, 500)
-  }
+// Create temporary directory for video duration processing if needed
+const tempDir = path.join(process.cwd(), 'temp')
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir, { recursive: true })
 }
 
-// Add endpoint to check upload progress
-export const getUploadProgress = async (c) => {
-  try {
-    const fileId = c.req.param('fileId')
-    const file = await File.findById(fileId).select('status progress error')
-    
-    if (!file) {
-      return c.json({ success: false, message: 'Upload not found' }, 404)
-    }
-
-    return c.json({
-      success: true,
-      status: file.status,
-      progress: file.progress,
-      error: file.error
-    })
-  } catch (error) {
-    return c.json({ success: false, message: 'Failed to get upload progress' }, 500)
-  }
-}
-
-
+// Upload type configurations
 export const uploadTypes = {
   CHANNEL: {
     folder: 'channels',
-    fields: ['thumbnail']
+    fields: ['thumbnail', 'logo', 'banner']
   },
   VIDEO: {
     folder: 'videos',
@@ -105,38 +34,256 @@ export const uploadTypes = {
   ADVERTISEMENT: {
     folder: 'ads',
     fields: ['thumbnail', 'videoFile']
+  },
+  CONTENT: {
+    folder: 'content',
+    fields: [
+      'videoFile', 
+      'thumbnail',
+      'verticalBanner', 
+      'horizontalBanner', 
+      'trailer'
+    ]
+  },
+  CREATOR_CONTENT: {
+    folder: 'creator-content',
+    fields: [
+      'videoFile', 
+      'thumbnail',
+      'verticalBanner', 
+      'horizontalBanner', 
+      'trailer'
+    ]
+  },
+  EPISODE: {
+    folder: 'episodes',
+    fields: ['videoFile', 'thumbnail']
+  },
+  LESSON: {
+    folder: 'lessons',
+    fields: ['videoFile', 'thumbnail']
   }
 }
 
-export const handleUpload = (type) => async (c, next) => {
-  try {
-    const formData = await c.req.formData()
-    const uploads = {}
-    const userId = c.get('user')._id
-
-    for (const field of uploadTypes[type].fields) {
-      const file = formData.get(field)
-      if (file && file instanceof Blob) {
-        // Get video duration if it's a video file
-        if (field === 'videoFile' && file.type.startsWith('video/')) {
-          const arrayBuffer = await file.arrayBuffer()
-          const duration = await getVideoDurationInSeconds(Buffer.from(arrayBuffer))
-          uploads.duration = Math.round(duration)
-        }
-
-        const fileUrl = await uploadToR2(
-          file,
-          `${uploadTypes[type].folder}/${field}`,
-          userId,
-          { model: type, documentId: 'pending' }
+/**
+ * Unified file upload middleware
+ * @param {string} type - The type of upload (from uploadTypes)
+ * @returns {Function} Middleware function
+ */
+export const handleUpload = (type) => {
+  return async (c, next) => {
+    try {
+      const formData = await c.req.formData()
+      const uploads = {}
+      const fileUploads = []
+      const userId = c.get('user')?._id
+      
+      // Get upload configuration
+      const uploadConfig = uploadTypes[type] || {
+        folder: 'misc',
+        fields: Array.from(formData.keys()).filter(key => 
+          formData.get(key) instanceof Blob
         )
-        uploads[field] = fileUrl
       }
+      
+      // Process each file in the form data
+      for (const field of uploadConfig.fields) {
+        const file = formData.get(field)
+        
+        if (file && file instanceof Blob) {
+          // Validate file type
+          if ((field === 'videoFile' || field === 'trailer') && !allowedVideoTypes.includes(file.type)) {
+            return c.json({ 
+              success: false, 
+              message: `Invalid video type for ${field}. Allowed types: ${allowedVideoTypes.join(', ')}` 
+            }, 400)
+          }
+          
+          if ((field.includes('thumbnail') || field.includes('Banner') || field.includes('logo')) && 
+              !allowedImageTypes.includes(file.type)) {
+            return c.json({ 
+              success: false, 
+              message: `Invalid image type for ${field}. Allowed types: ${allowedImageTypes.join(', ')}` 
+            }, 400)
+          }
+          
+          // Validate file size
+          const maxSize = (field === 'videoFile' || field === 'trailer') ? 
+            maxFileSize.video : maxFileSize.image
+            
+          if (file.size > maxSize) {
+            return c.json({ 
+              success: false, 
+              message: `File too large for ${field}. Maximum size: ${
+                (field === 'videoFile' || field === 'trailer') ? 
+                  (maxSize / (1024 * 1024 * 1024)) + 'GB' : 
+                  (maxSize / (1024 * 1024)) + 'MB'
+              }` 
+            }, 400)
+          }
+          
+          // Create file upload tracking record if user is authenticated
+          let fileUpload = null
+          if (userId) {
+            fileUpload = new FileUpload({
+              userId,
+              fileName: file.name || `${field}-${Date.now()}`,
+              fileSize: file.size,
+              fileType: file.type,
+              uploadPath: `${uploadConfig.folder}/${field}`,
+              modelType: type,
+              status: 'uploading'
+            })
+            
+            await fileUpload.save()
+            fileUploads.push(fileUpload)
+          }
+          
+          // For video files, we need to get duration
+          let tempFilePath = null
+          if ((field === 'videoFile' || field === 'trailer') && file.type.startsWith('video/')) {
+            try {
+              // Create a temporary file just for duration calculation
+              const ext = path.extname(file.name || '.mp4')
+              tempFilePath = path.join(tempDir, `${uuidv4()}${ext}`)
+              const buffer = Buffer.from(await file.arrayBuffer())
+              fs.writeFileSync(tempFilePath, buffer)
+              
+              const duration = await getVideoDurationInSeconds(tempFilePath)
+              
+              if (field === 'trailer') {
+                uploads.trailerDuration = Math.round(duration)
+              } else {
+                uploads.duration = Math.round(duration)
+              }
+            } catch (error) {
+              console.error('Error getting video duration:', error)
+            }
+          }
+          
+          // Upload to cloud storage
+          try {
+            // Use the existing uploadToR2 utility if available
+            if (typeof uploadToR2 === 'function') {
+              const fileUrl = await uploadToR2(
+                file,
+                `${uploadConfig.folder}/${field}`,
+                userId,
+                { model: type, documentId: 'pending' }
+              )
+              uploads[field] = fileUrl
+            } else {
+              // Fallback to direct S3 implementation
+              const fileExt = path.extname(file.name || '')
+              const fileName = `${uploadConfig.folder}/${uuidv4()}${fileExt}`
+              const fileBuffer = Buffer.from(await file.arrayBuffer())
+              
+              const command = new PutObjectCommand({
+                Bucket: process.env.R2_BUCKET_NAME,
+                Key: fileName,
+                Body: fileBuffer,
+                ContentType: file.type
+              })
+              
+              const s3Client = new S3Client({
+                region: 'auto',
+                endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+                credentials: {
+                  accessKeyId: process.env.R2_ACCESS_KEY_ID,
+                  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+                }
+              })
+              
+              await s3Client.send(command)
+              uploads[field] = `https://${process.env.R2_BUCKET_NAME}.r2.dev/${fileName}`
+            }
+            
+            // Update file upload status
+            if (fileUpload) {
+              await FileUpload.findByIdAndUpdate(fileUpload._id, {
+                status: 'completed',
+                url: uploads[field]
+              })
+            }
+          } catch (error) {
+            console.error('Error uploading to cloud storage:', error)
+            if (fileUpload) {
+              await FileUpload.findByIdAndUpdate(fileUpload._id, {
+                status: 'failed',
+                error: error.message
+              })
+            }
+            throw error
+          } finally {
+            // Clean up temp file if it exists
+            if (tempFilePath && fs.existsSync(tempFilePath)) {
+              fs.unlinkSync(tempFilePath)
+            }
+          }
+        }
+      }
+      
+      // Process non-file form data
+      const body = {}
+      for (const [key, value] of formData.entries()) {
+        if (!(value instanceof Blob)) {
+          try {
+            // Try to parse as JSON if possible
+            body[key] = JSON.parse(value)
+          } catch (e) {
+            // Otherwise use as is
+            body[key] = value
+          }
+        }
+      }
+      
+      // Add uploads and body to context
+      c.set('uploads', uploads)
+      c.set('body', body)
+      c.set('fileUploads', fileUploads)
+      
+      await next()
+    } catch (error) {
+      console.error('Upload error:', error)
+      
+      // Mark any tracked uploads as failed
+      const fileUploads = c.get('fileUploads') || []
+      for (const upload of fileUploads) {
+        await FileUpload.findByIdAndUpdate(upload._id, {
+          status: 'failed',
+          error: error.message
+        })
+      }
+      
+      return c.json({ 
+        success: false, 
+        message: 'File upload failed: ' + error.message 
+      }, 500)
+    }
+  }
+}
+
+// Add endpoint to check upload progress
+export const getUploadProgress = async (c) => {
+  try {
+    const fileId = c.req.param('fileId')
+    const fileUpload = await FileUpload.findById(fileId).select('status progress error url')
+    
+    if (!fileUpload) {
+      return c.json({ success: false, message: 'Upload not found' }, 404)
     }
 
-    c.set('uploads', uploads)
-    await next()
+    return c.json({
+      success: true,
+      status: fileUpload.status,
+      progress: fileUpload.progress,
+      error: fileUpload.error,
+      url: fileUpload.url
+    })
   } catch (error) {
-    return c.json({ success: false, message: "File upload failed" }, 500)
+    return c.json({ success: false, message: 'Failed to get upload progress' }, 500)
   }
 }
+
+// For backward compatibility
+export const handleFileUpload = handleUpload
