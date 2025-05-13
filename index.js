@@ -89,6 +89,7 @@ app.get('/api-docs', async (c) => {
     <body>
         <div id="swagger-ui"></div>
         <script src="https://unpkg.com/swagger-ui-dist@latest/swagger-ui-bundle.js" crossorigin></script>
+        <script src="https://unpkg.com/swagger-ui-dist@latest/swagger-ui-standalone-preset.js" crossorigin></script>
         <script>
             window.onload = () => {
                 window.ui = SwaggerUIBundle({
@@ -97,9 +98,9 @@ app.get('/api-docs', async (c) => {
                     deepLinking: true,
                     presets: [
                         SwaggerUIBundle.presets.apis,
-                        SwaggerUIBundle.SwaggerUIStandalonePreset
+                        SwaggerUIStandalonePreset
                     ],
-                    layout: "StandaloneLayout"
+                    layout: "BaseLayout"
                 });
             };
         </script>
@@ -123,8 +124,7 @@ app.get('/api-docs/debug', (c) => {
   return c.json({
     paths: Object.keys(swaggerSpec.paths || {}),
     tags: swaggerSpec.tags || [],
-    components: Object.keys(swaggerSpec.components || {}),
-    apis: options.apis
+    components: Object.keys(swaggerSpec.components || {})
   })
 })
 
