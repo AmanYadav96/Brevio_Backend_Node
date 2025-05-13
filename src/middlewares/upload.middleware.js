@@ -16,10 +16,50 @@ const maxFileSize = {
 }
 
 // Create temporary directory for video duration processing if needed
-const tempDir = path.join(process.cwd(), 'temp')
-if (!fs.existsSync(tempDir)) {
-  fs.mkdirSync(tempDir, { recursive: true })
+// Add this near the top of your file
+import fs from 'fs'
+import path from 'path'
+import os from 'os'
+
+// Replace your temp directory creation code with this
+const getTempDirectory = () => {
+  // Check if running on Vercel
+  if (process.env.VERCEL === '1') {
+    // Use the /tmp directory which is writable on Vercel
+    const tempDir = path.join('/tmp', 'brevio-uploads')
+    
+    // Create the directory if it doesn't exist
+    try {
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true })
+      }
+    } catch (error) {
+      console.error('Error creating temp directory:', error)
+      // Fallback to system temp directory
+      return os.tmpdir()
+    }
+    
+    return tempDir
+  } else {
+    // For local development, use the original path
+    const tempDir = path.join(process.cwd(), 'temp')
+    
+    // Create the directory if it doesn't exist
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true })
+    }
+    
+    return tempDir
+  }
 }
+
+// Replace your existing temp directory reference with this function call
+// For example, if you have something like:
+// const tempDir = path.join(process.cwd(), 'temp')
+// fs.mkdirSync(tempDir, { recursive: true })
+
+// Replace it with:
+const tempDir = getTempDirectory()
 
 // Upload type configurations
 export const uploadTypes = {
