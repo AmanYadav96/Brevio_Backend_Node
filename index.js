@@ -148,19 +148,33 @@ export default async function handler(request, response) {
       global.mongoConnected = true
     }
     
-    // Use Hono's fetch handler
-    const fetchHandler = app.fetch
+    // Create headers object from request headers
+    const headers = new Headers()
+    for (const [key, value] of Object.entries(request.headers)) {
+      headers.set(key, value)
+    }
     
-    // Create a Request object from the incoming request
-    const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`)
-    const req = new Request(url, {
+    // Handle request body
+    let body = null
+    if (request.body) {
+      if (typeof request.body === 'string') {
+        body = request.body
+      } else if (Buffer.isBuffer(request.body)) {
+        body = request.body
+      } else {
+        body = JSON.stringify(request.body)
+      }
+    }
+    
+    // Create a proper Request object
+    const req = new Request(request.url, {
       method: request.method,
-      headers: request.headers,
-      body: request.body ? request.body : undefined
+      headers: headers,
+      body: body
     })
     
-    // Process the request with Hono
-    const res = await fetchHandler(req)
+    // Process with Hono
+    const res = await app.fetch(req)
     
     // Set status code
     response.statusCode = res.status
@@ -170,20 +184,18 @@ export default async function handler(request, response) {
       response.setHeader(key, value)
     }
     
-    // Send response body
+    // Handle response based on content type
     const contentType = res.headers.get('content-type') || ''
-    if (contentType.includes('application/json')) {
-      try {
-        const jsonData = await res.json()
-        response.end(JSON.stringify(jsonData))
-      } catch (error) {
-        console.error('Error parsing JSON response:', error)
-        const body = await res.text()
-        response.end(body)
-      }
+    
+    if (contentType.includes('text/html')) {
+      const text = await res.text()
+      response.end(text)
+    } else if (contentType.includes('application/json')) {
+      const text = await res.text()
+      response.end(text)
     } else {
-      const body = await res.arrayBuffer()
-      response.end(Buffer.from(body))
+      const buffer = await res.arrayBuffer()
+      response.end(Buffer.from(buffer))
     }
   } catch (error) {
     console.error('Serverless function error:', error)
@@ -191,7 +203,8 @@ export default async function handler(request, response) {
     response.setHeader('Content-Type', 'application/json')
     response.end(JSON.stringify({ 
       success: false, 
-      message: 'Internal server error' 
+      message: 'Internal server error',
+      error: error.message
     }))
   }
 }
