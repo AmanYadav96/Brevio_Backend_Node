@@ -1,5 +1,30 @@
 import mongoose from 'mongoose'
 
+const purchasedCourseSchema = new mongoose.Schema({
+  course: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'CreatorContent',
+    required: true
+  },
+  purchaseDate: {
+    type: Date,
+    default: Date.now
+  },
+  price: {
+    type: Number,
+    default: 0
+  },
+  accessType: {
+    type: String,
+    enum: ['lifetime', 'limited'],
+    default: 'lifetime'
+  },
+  expiryDate: {
+    type: Date
+  },
+  paymentId: String
+})
+
 const channelSubscriptionSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -13,8 +38,12 @@ const channelSubscriptionSchema = new mongoose.Schema({
   },
   subscription: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Subscription',
-    required: true
+    ref: 'Subscription'
+  },
+  subscriptionType: {
+    type: String,
+    enum: ['regular', 'course_purchase'],
+    default: 'regular'
   },
   startDate: {
     type: Date,
@@ -47,7 +76,8 @@ const channelSubscriptionSchema = new mongoose.Schema({
   }],
   lastWatched: {
     type: Date
-  }
+  },
+  purchasedCourses: [purchasedCourseSchema]
 }, {
   timestamps: true
 })

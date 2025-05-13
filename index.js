@@ -21,6 +21,8 @@ import uploadRoutes from "./src/routes/upload.routes.js"
 import fileUploadRoutes from "./src/routes/fileUpload.routes.js"
 import creatorContentRoutes from "./src/routes/creatorContent.routes.js"
 import channelSubscriptionRoutes from "./src/routes/channelSubscription.routes.js"
+import sliderRoutes from "./src/routes/slider.routes.js"
+import categoryRoutes from "./src/routes/category.routes.js"
 
 const app = new Hono()
 
@@ -63,6 +65,8 @@ app.route("/api/upload", uploadRoutes)
 app.route("/api/file-uploads", fileUploadRoutes)
 app.route("/api/creator-content", creatorContentRoutes)
 app.route("/api/channel-subscriptions", channelSubscriptionRoutes)
+app.route("/api/sliders", sliderRoutes)
+app.route("/api/categories", categoryRoutes)
 
 // Error handling middleware
 app.use("*", errorHandler)

@@ -2,6 +2,7 @@ import ChannelSubscription from '../models/channelSubscription.model.js'
 import Channel from '../models/channel.model.js'
 import User from '../models/user.model.js'
 import Subscription from '../models/subscription.model.js'
+import CreatorContent from '../models/creatorContent.model.js'
 
 // Subscribe a user to a channel
 export const subscribeToChannel = async (c) => {
@@ -271,6 +272,171 @@ export const updateLastWatched = async (c) => {
     return c.json({ 
       success: false, 
       message: 'Failed to update last watched time', 
+      error: error.message 
+    }, 500)
+  }
+}
+
+// Add purchased course to user subscription
+export const addPurchasedCourse = async (c) => {
+  try {
+    const { channelId, contentId } = c.req.json()
+    const userId = c.get('user')._id
+    
+    // Check if content exists and is a course
+    const course = await CreatorContent.findById(contentId)
+    if (!course) {
+      return c.json({ success: false, message: 'Course not found' }, 404)
+    }
+    
+    // Verify the course belongs to the specified channel
+    if (course.channel.toString() !== channelId) {
+      return c.json({ 
+        success: false, 
+        message: 'Course does not belong to the specified channel' 
+      }, 400)
+    }
+    
+    // Find user's subscription to this channel
+    const subscription = await ChannelSubscription.findOne({
+      user: userId,
+      channel: channelId,
+      isActive: true,
+      endDate: { $gt: new Date() }
+    })
+    
+    if (!subscription) {
+      // If no active subscription exists, create a new one specifically for course purchases
+      const newSubscription = await ChannelSubscription.create({
+        user: userId,
+        channel: channelId,
+        isActive: true,
+        startDate: new Date(),
+        endDate: new Date(Date.now() + (10 * 365 * 24 * 60 * 60 * 1000)), // 10 years for purchased content
+        purchasedCourses: [{
+          course: contentId,
+          purchaseDate: new Date(),
+          price: course.pricing?.price || 0,
+          accessType: 'lifetime'
+        }],
+        subscriptionType: 'course_purchase'
+      })
+      
+      return c.json({
+        success: true,
+        message: 'Course purchased successfully',
+        data: newSubscription
+      })
+    }
+    
+    // Check if course is already purchased
+    const alreadyPurchased = subscription.purchasedCourses?.some(
+      purchase => purchase.course.toString() === contentId
+    )
+    
+    if (alreadyPurchased) {
+      return c.json({
+        success: true,
+        message: 'You already own this course',
+        data: subscription
+      })
+    }
+    
+    // Add course to existing subscription
+    subscription.purchasedCourses = subscription.purchasedCourses || []
+    subscription.purchasedCourses.push({
+      course: contentId,
+      purchaseDate: new Date(),
+      price: course.pricing?.price || 0,
+      accessType: 'lifetime'
+    })
+    
+    await subscription.save()
+    
+    return c.json({
+      success: true,
+      message: 'Course purchased successfully',
+      data: subscription
+    })
+  } catch (error) {
+    console.error('Error purchasing course:', error)
+    return c.json({ 
+      success: false, 
+      message: 'Failed to purchase course', 
+      error: error.message 
+    }, 500)
+  }
+}
+
+// Get user's purchased courses
+export const getUserPurchasedCourses = async (c) => {
+  try {
+    const userId = c.get('user')._id
+    
+    // Find all subscriptions with purchased courses
+    const subscriptions = await ChannelSubscription.find({
+      user: userId,
+      purchasedCourses: { $exists: true, $ne: [] }
+    }).populate({
+      path: 'purchasedCourses.course',
+      select: 'title description thumbnail videoFile duration pricing status'
+    }).populate('channel', 'name logo')
+    
+    // Extract all purchased courses from subscriptions
+    const purchasedCourses = []
+    subscriptions.forEach(subscription => {
+      subscription.purchasedCourses.forEach(purchase => {
+        if (purchase.course) {
+          purchasedCourses.push({
+            course: purchase.course,
+            purchaseDate: purchase.purchaseDate,
+            price: purchase.price,
+            accessType: purchase.accessType,
+            channel: subscription.channel
+          })
+        }
+      })
+    })
+    
+    return c.json({
+      success: true,
+      count: purchasedCourses.length,
+      data: purchasedCourses
+    })
+  } catch (error) {
+    console.error('Error getting purchased courses:', error)
+    return c.json({ 
+      success: false, 
+      message: 'Failed to get purchased courses', 
+      error: error.message 
+    }, 500)
+  }
+}
+
+// Check if user has purchased a specific course
+export const checkCoursePurchase = async (c) => {
+  try {
+    const { contentId } = c.req.param()
+    const userId = c.get('user')._id
+    
+    // Find subscription with this course
+    const subscription = await ChannelSubscription.findOne({
+      user: userId,
+      'purchasedCourses.course': contentId
+    })
+    
+    return c.json({
+      success: true,
+      hasPurchased: !!subscription,
+      data: subscription ? subscription.purchasedCourses.find(
+        purchase => purchase.course.toString() === contentId
+      ) : null
+    })
+  } catch (error) {
+    console.error('Error checking course purchase:', error)
+    return c.json({ 
+      success: false, 
+      message: 'Failed to check course purchase', 
       error: error.message 
     }, 500)
   }

@@ -5,7 +5,10 @@ import {
   getChannelSubscribers, 
   cancelSubscription, 
   checkSubscription,
-  updateLastWatched
+  updateLastWatched,
+  addPurchasedCourse,
+  getUserPurchasedCourses,
+  checkCoursePurchase
 } from "../controllers/channelSubscription.controller.js"
 import { protect } from "../middlewares/auth.middleware.js"
 
@@ -31,5 +34,10 @@ app.get("/check/:channelId", checkSubscription)
 
 // Update last watched time
 app.patch("/:channelId/watch", updateLastWatched)
+
+// Course purchase endpoints
+app.post("/purchase-course", addPurchasedCourse)
+app.get("/my-courses", getUserPurchasedCourses)
+app.get("/check-course/:contentId", checkCoursePurchase)
 
 export default app
