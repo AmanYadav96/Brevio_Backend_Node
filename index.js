@@ -37,7 +37,7 @@ const connectWithRetry = async () => {
   }
 }
 
-// Middlewares
+// Middlewares and routes setup
 app.use('*', async (c, next) => {
   if (!global.mongoConnected) {
     await connectWithRetry()
@@ -117,5 +117,37 @@ if (process.env.NODE_ENV !== 'production') {
   })
 }
 
-// Export the fetch handler for Vercel
-export default app
+// Export a serverless function handler for Vercel
+export default async function handler(request, response) {
+  // Connect to database if not already connected
+  if (!global.mongoConnected) {
+    await connectWithRetry()
+    global.mongoConnected = true
+  }
+  
+  // Use Hono's fetch handler
+  const fetchHandler = app.fetch
+  
+  // Create a Request object from the incoming request
+  const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`)
+  const req = new Request(url, {
+    method: request.method,
+    headers: request.headers,
+    body: request.body ? request.body : undefined
+  })
+  
+  // Process the request with Hono
+  const res = await fetchHandler(req)
+  
+  // Set status code
+  response.statusCode = res.status
+  
+  // Set headers
+  for (const [key, value] of res.headers.entries()) {
+    response.setHeader(key, value)
+  }
+  
+  // Send response body
+  const body = await res.arrayBuffer()
+  response.end(Buffer.from(body))
+}
