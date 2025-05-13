@@ -14,6 +14,9 @@ import paymentRoutes from "./src/routes/payment.routes.js"
 import genreRoutes from "./src/routes/genre.routes.js"
 import subscriptionRoutes from "./src/routes/subscription.routes.js"
 import channelRoutes from "./src/routes/channel.routes.js"
+import donationRoutes from "./src/routes/donation.routes.js"
+import reportRoutes from "./src/routes/report.routes.js" // Add this import
+import contractRoutes from "./src/routes/contract.routes.js" // Add contract routes import
 import { errorHandler } from "./src/middlewares/error.middleware.js"
 import { swaggerSpec } from './src/config/swagger.js'
 import advertisementRoutes from "./src/routes/advertisement.routes.js"
@@ -67,6 +70,9 @@ app.route("/api/creator-content", creatorContentRoutes)
 app.route("/api/channel-subscriptions", channelSubscriptionRoutes)
 app.route("/api/sliders", sliderRoutes)
 app.route("/api/categories", categoryRoutes)
+app.route("/api/donations", donationRoutes)
+app.route("/api/reports", reportRoutes)
+app.route("/api/contracts", contractRoutes) // Add contract routes
 
 // Error handling middleware
 app.use("*", errorHandler)

@@ -1,20 +1,39 @@
-import { Hono } from "hono"
-import {
-  createCheckoutSession,
-  handleWebhook,
-  getPaymentHistory,
-  cancelSubscription,
-} from "../controllers/payment.controller.js"
-import { protect } from "../middlewares/auth.middleware.js"
+import { Hono } from 'hono'
+import { 
+  createPayment,
+  processStripePayment,
+  getUserPayments,
+  getCreatorPayments,
+  processCreatorPayout,
+  getPaymentDetails,
+  processRefund
+} from '../controllers/payment.controller.js'
+import { protect, restrictTo } from '../middlewares/auth.middleware.js'
 
-const router = new Hono()
+const app = new Hono()
 
-// Public routes
-router.post("/webhook", handleWebhook)
+// Apply authentication middleware to all routes
+app.use('*', protect)
 
-// Protected routes
-router.post("/create-checkout-session", protect, createCheckoutSession)
-router.get("/history", protect, getPaymentHistory)
-router.post("/cancel-subscription", protect, cancelSubscription)
+// Create a new payment
+app.post('/', createPayment)
 
-export default router
+// Process a payment with Stripe
+app.post('/process-stripe', processStripePayment)
+
+// Get user's payment history
+app.get('/user', getUserPayments)
+
+// Get creator's received payments
+app.get('/creator', getCreatorPayments)
+
+// Process creator payout (admin only)
+app.post('/creator-payout', restrictTo('admin'), processCreatorPayout)
+
+// Get payment details
+app.get('/:id', getPaymentDetails)
+
+// Process refund
+app.post('/refund', restrictTo('admin'), processRefund)
+
+export default app

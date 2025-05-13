@@ -1,197 +1,449 @@
-import stripe from "../config/stripe.js"
-import User from "../models/user.model.js"
-import Payment, { PaymentStatus, PaymentType } from "../models/payment.model.js"
-import { AppError } from "../utils/app-error.js"
+import Payment, { PaymentType, PaymentStatus, PaymentMethod } from '../models/payment.model.js'
+import User from '../models/user.model.js'
+import Donation from '../models/donation.model.js'
+import SubscriptionPlan from '../models/subscription.model.js'
+import CreatorContent from '../models/creatorContent.model.js'
+import ChannelSubscription from '../models/channelSubscription.model.js'
+import stripe from '../config/stripe.js'
+import { createError } from '../utils/error.js'
+import mongoose from 'mongoose'
 
-export const createCheckoutSession = async (c) => {
+// Create a payment
+export const createPayment = async (c) => {
   try {
-    const userId = c.get("userId")
-    const { priceId, successUrl, cancelUrl } = await c.req.json()
+    const userId = c.get('user')._id
+    const {
+      amount,
+      currency = 'USD',
+      paymentType,
+      paymentMethod,
+      creatorId,
+      subscriptionPlanId,
+      courseId,
+      donationId,
+      channelSubscriptionId,
+      metadata = {}
+    } = await c.req.json()
 
-    // Find user
-    const user = await User.findById(userId)
-    if (!user) {
-      throw new AppError("User not found", 404)
+    // Validate required fields
+    if (!amount || !paymentType || !paymentMethod) {
+      return c.json(createError(400, 'Missing required fields'), 400)
     }
 
-    if (!user.stripeCustomerId) {
-      throw new AppError("Stripe customer ID not found", 400)
+    // Validate payment type
+    if (!Object.values(PaymentType).includes(paymentType)) {
+      return c.json(createError(400, 'Invalid payment type'), 400)
     }
 
-    // Create checkout session
-    const session = await stripe.checkout.sessions.create({
-      customer: user.stripeCustomerId,
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
-      mode: "subscription",
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      metadata: {
-        userId: userId,
-      },
-    })
+    // Validate payment method
+    if (!Object.values(PaymentMethod).includes(paymentMethod)) {
+      return c.json(createError(400, 'Invalid payment method'), 400)
+    }
 
-    // Create payment record
-    await Payment.create({
-      user: userId,
-      amount: 0, // Will be updated when payment is completed
-      currency: "usd",
-      status: PaymentStatus.PENDING,
-      type: PaymentType.SUBSCRIPTION,
-      stripeSessionId: session.id,
-    })
+    // Calculate platform fee (example: 10% of the amount)
+    const platformFeePercentage = 0.1
+    const platformFee = amount * platformFeePercentage
+    const netAmount = amount - platformFee
+
+    // Create payment object
+    const paymentData = {
+      amount,
+      currency,
+      paymentType,
+      paymentMethod,
+      platformFee,
+      platformFeePercentage,
+      netAmount,
+      metadata,
+      status: PaymentStatus.PENDING
+    }
+
+    // Add type-specific fields
+    if (paymentType !== PaymentType.CREATOR_PAYOUT) {
+      paymentData.userId = userId
+    }
+
+    if ([
+      PaymentType.DONATION,
+      PaymentType.COURSE_PURCHASE,
+      PaymentType.CHANNEL_SUBSCRIPTION,
+      PaymentType.CREATOR_PAYOUT
+    ].includes(paymentType)) {
+      paymentData.creatorId = creatorId
+    }
+
+    if (paymentType === PaymentType.SUBSCRIPTION && subscriptionPlanId) {
+      paymentData.subscriptionPlanId = subscriptionPlanId
+    }
+
+    if (paymentType === PaymentType.COURSE_PURCHASE && courseId) {
+      paymentData.courseId = courseId
+    }
+
+    if (paymentType === PaymentType.DONATION && donationId) {
+      paymentData.donationId = donationId
+    }
+
+    if (paymentType === PaymentType.CHANNEL_SUBSCRIPTION && channelSubscriptionId) {
+      paymentData.channelSubscriptionId = channelSubscriptionId
+    }
+
+    // Create the payment
+    const payment = new Payment(paymentData)
+    await payment.save()
 
     return c.json({
       success: true,
-      sessionId: session.id,
-      url: session.url,
+      message: 'Payment created successfully',
+      payment
+    }, 201)
+  } catch (error) {
+    console.error('Error creating payment:', error)
+    return c.json(createError(500, 'Error creating payment'), 500)
+  }
+}
+
+// Process a payment with Stripe
+export const processStripePayment = async (c) => {
+  try {
+    const { paymentId, paymentMethodId } = await c.req.json()
+
+    // Find the payment
+    const payment = await Payment.findById(paymentId)
+    if (!payment) {
+      return c.json(createError(404, 'Payment not found'), 404)
+    }
+
+    // Create a payment intent with Stripe
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(payment.amount * 100), // Convert to cents
+      currency: payment.currency.toLowerCase(),
+      payment_method: paymentMethodId,
+      confirm: true,
+      description: `Payment for ${payment.paymentType}`,
+      metadata: {
+        paymentId: payment._id.toString(),
+        paymentType: payment.paymentType
+      }
+    })
+
+    // Update payment with Stripe details
+    payment.paymentProviderId = paymentIntent.id
+    payment.status = paymentIntent.status === 'succeeded' 
+      ? PaymentStatus.COMPLETED 
+      : PaymentStatus.PENDING
+    
+    // If payment succeeded, update related entities
+    if (payment.status === PaymentStatus.COMPLETED) {
+      await updateRelatedEntities(payment)
+    }
+    
+    await payment.save()
+
+    return c.json({
+      success: true,
+      message: 'Payment processed successfully',
+      payment,
+      stripePaymentIntent: paymentIntent
     })
   } catch (error) {
-    if (error instanceof AppError) {
-      return c.json({ success: false, message: error.message }, error.statusCode)
-    }
-    console.error("Create checkout session error:", error)
-    return c.json({ success: false, message: "Failed to create checkout session" }, 500)
+    console.error('Error processing payment:', error)
+    return c.json(createError(500, 'Error processing payment: ' + error.message), 500)
   }
 }
 
-export const handleWebhook = async (c) => {
-  try {
-    const signature = c.req.header("stripe-signature")
-    const body = await c.req.text()
-
-    let event
-
-    try {
-      event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET)
-    } catch (err) {
-      return c.text("Webhook signature verification failed", 400)
-    }
-
-    // Handle the event
-    switch (event.type) {
-      case "checkout.session.completed": {
-        const session = event.data.object
-
-        // Update payment record
-        const payment = await Payment.findOne({ stripeSessionId: session.id })
-        if (payment) {
-          payment.status = PaymentStatus.COMPLETED
-          payment.amount = session.amount_total / 100 // Convert from cents
-          payment.stripePaymentId = session.payment_intent
-          await payment.save()
-        }
-
-        // Update user subscription status
-        if (session.metadata?.userId) {
-          const user = await User.findById(session.metadata.userId)
-          if (user) {
-            user.subscriptionStatus = "active"
-            user.subscriptionId = session.subscription
-            await user.save()
-          }
-        }
-
-        break
+// Helper function to update related entities when payment is completed
+async function updateRelatedEntities(payment) {
+  switch (payment.paymentType) {
+    case PaymentType.DONATION:
+      if (payment.donationId) {
+        await Donation.findByIdAndUpdate(payment.donationId, {
+          status: 'completed',
+          paymentId: payment._id
+        })
       }
-
-      case "invoice.payment_succeeded": {
-        const invoice = event.data.object
-
-        // Create payment record for recurring payments
-        if (invoice.customer) {
-          const user = await User.findOne({ stripeCustomerId: invoice.customer })
-          if (user) {
-            await Payment.create({
-              user: user._id,
-              amount: invoice.amount_paid / 100, // Convert from cents
-              currency: invoice.currency,
-              status: PaymentStatus.COMPLETED,
-              type: PaymentType.SUBSCRIPTION,
-              stripePaymentId: invoice.payment_intent,
-              metadata: {
-                invoiceId: invoice.id,
-              },
-            })
-          }
-        }
-
-        break
+      break
+    case PaymentType.SUBSCRIPTION:
+      // Update user subscription status
+      if (payment.userId) {
+        await User.findByIdAndUpdate(payment.userId, {
+          'subscription.status': 'active',
+          'subscription.planId': payment.subscriptionPlanId,
+          'subscription.startDate': new Date(),
+          'subscription.endDate': calculateSubscriptionEndDate(payment)
+        })
       }
-
-      case "customer.subscription.deleted": {
-        const subscription = event.data.object
-
-        // Update user subscription status
-        const user = await User.findOne({ subscriptionId: subscription.id })
-        if (user) {
-          user.subscriptionStatus = "canceled"
-          await user.save()
-        }
-
-        break
+      break
+    case PaymentType.COURSE_PURCHASE:
+      // Add course to user's purchased courses
+      if (payment.userId && payment.courseId) {
+        await User.findByIdAndUpdate(payment.userId, {
+          $addToSet: { purchasedCourses: payment.courseId }
+        })
       }
-    }
-
-    return c.text("Webhook received", 200)
-  } catch (error) {
-    console.error("Webhook error:", error)
-    return c.text("Webhook error", 500)
+      break
+    case PaymentType.CHANNEL_SUBSCRIPTION:
+      // Update channel subscription status
+      if (payment.channelSubscriptionId) {
+        await ChannelSubscription.findByIdAndUpdate(payment.channelSubscriptionId, {
+          status: 'active',
+          paymentId: payment._id
+        })
+      }
+      break
   }
 }
 
-export const getPaymentHistory = async (c) => {
+// Helper function to calculate subscription end date
+function calculateSubscriptionEndDate(payment) {
+  const now = new Date()
+  const endDate = new Date(now)
+  
+  // Default to 1 month if no recurring interval specified
+  const interval = payment.recurringInterval || 'monthly'
+  
+  switch (interval) {
+    case 'daily':
+      endDate.setDate(now.getDate() + 1)
+      break
+    case 'weekly':
+      endDate.setDate(now.getDate() + 7)
+      break
+    case 'monthly':
+      endDate.setMonth(now.getMonth() + 1)
+      break
+    case 'yearly':
+      endDate.setFullYear(now.getFullYear() + 1)
+      break
+  }
+  
+  return endDate
+}
+
+// Get user's payment history
+export const getUserPayments = async (c) => {
   try {
-    const userId = c.get("userId")
-
-    // Get user's payment history
-    const payments = await Payment.find({ user: userId }).sort({ createdAt: -1 })
-
+    const userId = c.get('user')._id
+    const page = parseInt(c.req.query('page')) || 1
+    const limit = parseInt(c.req.query('limit')) || 10
+    const paymentType = c.req.query('type')
+    
+    const query = { userId }
+    if (paymentType && Object.values(PaymentType).includes(paymentType)) {
+      query.paymentType = paymentType
+    }
+    
+    const payments = await Payment.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate('creatorId', 'name email profilePicture')
+      .populate('subscriptionPlanId', 'name price')
+      .populate('courseId', 'title price')
+    
+    const total = await Payment.countDocuments(query)
+    
     return c.json({
       success: true,
       payments,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit)
+      }
     })
   } catch (error) {
-    console.error("Get payment history error:", error)
-    return c.json({ success: false, message: "Failed to fetch payment history" }, 500)
+    console.error('Error getting user payments:', error)
+    return c.json(createError(500, 'Error getting user payments'), 500)
   }
 }
 
-export const cancelSubscription = async (c) => {
+// Get creator's received payments
+export const getCreatorPayments = async (c) => {
   try {
-    const userId = c.get("userId")
-
-    // Find user
-    const user = await User.findById(userId)
-    if (!user) {
-      throw new AppError("User not found", 404)
+    const creatorId = c.get('user')._id
+    const page = parseInt(c.req.query('page')) || 1
+    const limit = parseInt(c.req.query('limit')) || 10
+    const paymentType = c.req.query('type')
+    const startDate = c.req.query('startDate')
+    const endDate = c.req.query('endDate')
+    
+    const query = { 
+      creatorId,
+      status: PaymentStatus.COMPLETED
     }
-
-    if (!user.subscriptionId) {
-      throw new AppError("No active subscription found", 400)
+    
+    if (paymentType && Object.values(PaymentType).includes(paymentType)) {
+      query.paymentType = paymentType
     }
-
-    // Cancel subscription in Stripe
-    await stripe.subscriptions.cancel(user.subscriptionId)
-
-    // Update user subscription status
-    user.subscriptionStatus = "canceled"
-    await user.save()
-
+    
+    // Date filtering
+    if (startDate || endDate) {
+      query.createdAt = {}
+      if (startDate) {
+        query.createdAt.$gte = new Date(startDate)
+      }
+      if (endDate) {
+        query.createdAt.$lte = new Date(endDate)
+      }
+    }
+    
+    const payments = await Payment.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate('userId', 'name email profilePicture')
+      .populate('courseId', 'title')
+      .populate('donationId')
+    
+    const total = await Payment.countDocuments(query)
+    
+    // Calculate total earnings
+    const earnings = await Payment.aggregate([
+      { $match: { 
+        creatorId: new mongoose.Types.ObjectId(creatorId), 
+        status: PaymentStatus.COMPLETED 
+      }},
+      { $group: { 
+        _id: '$paymentType', 
+        total: { $sum: '$netAmount' },
+        count: { $sum: 1 }
+      }}
+    ])
+    
+    // Calculate total earnings across all payment types
+    const totalEarnings = await Payment.aggregate([
+      { $match: { 
+        creatorId: new mongoose.Types.ObjectId(creatorId), 
+        status: PaymentStatus.COMPLETED 
+      }},
+      { $group: { 
+        _id: null, 
+        total: { $sum: '$netAmount' } 
+      }}
+    ])
+    
     return c.json({
       success: true,
-      message: "Subscription canceled successfully",
+      payments,
+      stats: {
+        totalPayments: total,
+        totalEarnings: totalEarnings.length > 0 ? totalEarnings[0].total : 0,
+        earningsByType: earnings
+      },
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit)
+      }
     })
   } catch (error) {
-    if (error instanceof AppError) {
-      return c.json({ success: false, message: error.message }, error.statusCode)
+    console.error('Error getting creator payments:', error)
+    return c.json(createError(500, 'Error getting creator payments'), 500)
+  }
+}
+
+// Process creator payout (admin only)
+export const processCreatorPayout = async (c) => {
+  try {
+    const adminId = c.get('user')._id
+    const { 
+      creatorId, 
+      amount, 
+      currency = 'USD',
+      payoutMethod,
+      notes
+    } = await c.req.json()
+    
+    // Create the payout payment
+    const payment = new Payment({
+      amount,
+      currency,
+      paymentType: PaymentType.CREATOR_PAYOUT,
+      paymentMethod: PaymentMethod.BANK_TRANSFER,
+      creatorId,
+      processedBy: adminId,
+      status: PaymentStatus.COMPLETED,
+      payoutMethod,
+      notes,
+      netAmount: amount, // No platform fee for payouts
+      platformFee: 0,
+      platformFeePercentage: 0
+    })
+    
+    await payment.save()
+    
+    return c.json({
+      success: true,
+      message: 'Creator payout processed successfully',
+      payment
+    })
+  } catch (error) {
+    console.error('Error processing creator payout:', error)
+    return c.json(createError(500, 'Error processing creator payout'), 500)
+  }
+}
+
+// Get payment details
+export const getPaymentDetails = async (c) => {
+  try {
+    const paymentId = c.req.param('id')
+    
+    const payment = await Payment.findById(paymentId)
+      .populate('userId', 'name email profilePicture')
+      .populate('creatorId', 'name email profilePicture')
+      .populate('subscriptionPlanId')
+      .populate('courseId')
+      .populate('donationId')
+      .populate('channelSubscriptionId')
+    
+    if (!payment) {
+      return c.json(createError(404, 'Payment not found'), 404)
     }
-    console.error("Cancel subscription error:", error)
-    return c.json({ success: false, message: "Failed to cancel subscription" }, 500)
+    
+    return c.json({
+      success: true,
+      payment
+    })
+  } catch (error) {
+    console.error('Error getting payment details:', error)
+    return c.json(createError(500, 'Error getting payment details'), 500)
+  }
+}
+
+// Process refund
+export const processRefund = async (c) => {
+  try {
+    const { paymentId, amount, reason } = await c.req.json()
+    
+    const payment = await Payment.findById(paymentId)
+    if (!payment) {
+      return c.json(createError(404, 'Payment not found'), 404)
+    }
+    
+    if (payment.status !== PaymentStatus.COMPLETED) {
+      return c.json(createError(400, 'Only completed payments can be refunded'), 400)
+    }
+    
+    // Process refund with Stripe if payment was made with Stripe
+    if (payment.paymentProviderId) {
+      await stripe.refunds.create({
+        payment_intent: payment.paymentProviderId,
+        amount: Math.round(amount * 100), // Convert to cents
+        reason: 'requested_by_customer'
+      })
+    }
+    
+    // Update payment with refund details
+    await payment.processRefund(amount, reason)
+    
+    return c.json({
+      success: true,
+      message: 'Refund processed successfully',
+      payment
+    })
+  } catch (error) {
+    console.error('Error processing refund:', error)
+    return c.json(createError(500, 'Error processing refund: ' + error.message), 500)
   }
 }

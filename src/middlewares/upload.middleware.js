@@ -61,6 +61,7 @@ const getTempDirectory = () => {
 const tempDir = getTempDirectory()
 
 // Upload type configurations
+// Add this to the uploadTypes object
 export const uploadTypes = {
   CHANNEL: {
     folder: 'channels',
@@ -101,6 +102,14 @@ export const uploadTypes = {
   LESSON: {
     folder: 'lessons',
     fields: ['videoFile', 'thumbnail']
+  },
+  REPORT: {
+    folder: 'reports',
+    fields: ['proofFile']
+  },
+  CONTRACT: {
+    folder: 'contracts',
+    fields: ['contractFile', 'attachment', 'signature']
   }
 }
 
