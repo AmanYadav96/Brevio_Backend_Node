@@ -19,7 +19,6 @@ import { swaggerSpec } from './src/config/swagger.js'
 import advertisementRoutes from "./src/routes/advertisement.routes.js"
 import uploadRoutes from "./src/routes/upload.routes.js"
 import fileUploadRoutes from "./src/routes/fileUpload.routes.js"
-
 import creatorContentRoutes from "./src/routes/creatorContent.routes.js"
 
 const app = new Hono()
