@@ -92,8 +92,14 @@ app.get('/api-docs', async (c) => {
         <script>
             window.onload = () => {
                 window.ui = SwaggerUIBundle({
-                    url: './api-docs/swagger.json',
+                    url: '/api-docs/swagger.json',
                     dom_id: '#swagger-ui',
+                    deepLinking: true,
+                    presets: [
+                        SwaggerUIBundle.presets.apis,
+                        SwaggerUIBundle.SwaggerUIStandalonePreset
+                    ],
+                    layout: "StandaloneLayout"
                 });
             };
         </script>
@@ -110,6 +116,16 @@ app.get('/api-docs/swagger.json', (c) => {
   c.header('Access-Control-Allow-Headers', 'Content-Type')
   
   return c.json(swaggerSpec)
+})
+
+// Add a debug endpoint to see what's in the swagger spec
+app.get('/api-docs/debug', (c) => {
+  return c.json({
+    paths: Object.keys(swaggerSpec.paths || {}),
+    tags: swaggerSpec.tags || [],
+    components: Object.keys(swaggerSpec.components || {}),
+    apis: options.apis
+  })
 })
 
 // For local development
