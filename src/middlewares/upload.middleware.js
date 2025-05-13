@@ -17,8 +17,7 @@ const maxFileSize = {
 
 // Create temporary directory for video duration processing if needed
 // Add this near the top of your file
-import fs from 'fs'
-import path from 'path'
+
 import os from 'os'
 
 // Replace your temp directory creation code with this
