@@ -92,7 +92,7 @@ app.get('/api-docs', async (c) => {
         <script>
             window.onload = () => {
                 window.ui = SwaggerUIBundle({
-                    url: '/api-docs/swagger.json',
+                    url: './api-docs/swagger.json',
                     dom_id: '#swagger-ui',
                 });
             };
@@ -102,7 +102,13 @@ app.get('/api-docs', async (c) => {
   `)
 })
 
+// Make sure the swagger.json endpoint is accessible
 app.get('/api-docs/swagger.json', (c) => {
+  // Add CORS headers specifically for this endpoint
+  c.header('Access-Control-Allow-Origin', '*')
+  c.header('Access-Control-Allow-Methods', 'GET')
+  c.header('Access-Control-Allow-Headers', 'Content-Type')
+  
   return c.json(swaggerSpec)
 })
 
