@@ -166,8 +166,13 @@ export default async function handler(request, response) {
       }
     }
     
+    // Create a proper URL from the request
+    const host = request.headers.host || 'localhost'
+    const protocol = host.includes('localhost') ? 'http' : 'https'
+    const url = new URL(request.url, `${protocol}://${host}`)
+    
     // Create a proper Request object
-    const req = new Request(request.url, {
+    const req = new Request(url.toString(), {
       method: request.method,
       headers: headers,
       body: body
