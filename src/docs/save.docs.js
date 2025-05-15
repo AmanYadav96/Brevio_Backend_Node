@@ -2,6 +2,34 @@
  * @swagger
  * components:
  *   schemas:
+ *     Content:
+ *       type: object
+ *       properties:
+ *         _id:
+ *           type: string
+ *           description: The content ID
+ *         title:
+ *           type: string
+ *           description: Content title
+ *         description:
+ *           type: string
+ *           description: Content description
+ *         thumbnail:
+ *           type: string
+ *           description: URL to content thumbnail
+ *         duration:
+ *           type: number
+ *           description: Content duration in seconds (for video/audio)
+ *         userLiked:
+ *           type: boolean
+ *           description: Whether the current authenticated user has liked this content
+ *         userSaved:
+ *           type: boolean
+ *           description: Whether the current authenticated user has saved this content
+ *         savedFolder:
+ *           type: string
+ *           nullable: true
+ *           description: The folder name where the user saved this content (if saved)
  *     Save:
  *       type: object
  *       properties:

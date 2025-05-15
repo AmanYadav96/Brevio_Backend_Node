@@ -42,6 +42,9 @@
  *         reports:
  *           type: integer
  *           description: Number of reports on this comment
+ *         userLiked:
+ *           type: boolean
+ *           description: Whether the current authenticated user has liked this comment
  *         replies:
  *           type: array
  *           items:

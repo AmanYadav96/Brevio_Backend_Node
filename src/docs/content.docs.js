@@ -435,5 +435,16 @@
  *                 views:
  *                   type: integer
  *       404:
- *         description: Content not found
+ *         description: Content not found 
+ * 
+ *         userLiked:
+ *           type: boolean
+ *           description: Whether the current authenticated user has liked this content
+ *         userSaved:
+ *           type: boolean
+ *           description: Whether the current authenticated user has saved this content
+ *         savedFolder:
+ *           type: string
+ *           nullable: true
+ *           description: The folder name where the user saved this content (if saved)
  */
