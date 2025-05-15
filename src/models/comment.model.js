@@ -1,40 +1,63 @@
-import mongoose from "mongoose"
+import mongoose from 'mongoose'
 
-const commentSchema = new mongoose.Schema(
-  {
-    content: {
-      type: String,
-      required: [true, "Comment content is required"],
-      trim: true,
-    },
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-    video: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Video",
-      required: true,
-    },
-    likes: {
-      type: Number,
-      default: 0,
-    },
-    dislikes: {
-      type: Number,
-      default: 0,
-    },
-    parentComment: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Comment",
-    },
+const commentSchema = new mongoose.Schema({
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   },
-  {
-    timestamps: true,
+  contentType: {
+    type: String,
+    enum: ['content', 'creatorContent'],
+    required: true
   },
-)
+  contentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true,
+    refPath: 'contentType'
+  },
+  text: {
+    type: String,
+    required: [true, 'Comment text is required'],
+    trim: true,
+    maxlength: [1000, 'Comment cannot exceed 1000 characters']
+  },
+  parentComment: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Comment',
+    default: null
+  },
+  status: {
+    type: String,
+    enum: ['active', 'hidden', 'deleted'],
+    default: 'active'
+  },
+  likes: {
+    type: Number,
+    default: 0
+  },
+  reports: {
+    type: Number,
+    default: 0
+  }
+}, {
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+})
 
-const Comment = mongoose.model("Comment", commentSchema)
+// Virtual for replies
+commentSchema.virtual('replies', {
+  ref: 'Comment',
+  localField: '_id',
+  foreignField: 'parentComment'
+})
+
+// Indexes for faster queries
+commentSchema.index({ contentType: 1, contentId: 1, createdAt: -1 })
+commentSchema.index({ user: 1 })
+commentSchema.index({ parentComment: 1 })
+
+const Comment = mongoose.model('Comment', commentSchema)
 
 export default Comment
