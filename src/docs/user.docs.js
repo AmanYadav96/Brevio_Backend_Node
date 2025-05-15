@@ -1,5 +1,161 @@
 /**
  * @swagger
+ * /api/users/profile:
+ *   get:
+ *     summary: Get user's own profile
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Success
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     role:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                     subscriptionStatus:
+ *                       type: string
+ *                     profilePicture:
+ *                       type: string
+ *                     bio:
+ *                       type: string
+ *                     dateOfBirth:
+ *                       type: string
+ *                       format: date
+ *                     gender:
+ *                       type: string
+ *                     phoneNumber:
+ *                       type: string
+ *                     country:
+ *                       type: string
+ *                     language:
+ *                       type: string
+ *                     preferences:
+ *                       type: object
+ *                     createdAt:
+ *                       type: string
+ *                       format: date-time
+ *                     updatedAt:
+ *                       type: string
+ *                       format: date-time
+ *       401:
+ *         description: Unauthorized - User not logged in
+ *       404:
+ *         description: User not found
+ *
+ *   patch:
+ *     summary: Update user's own profile
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: User's full name
+ *               bio:
+ *                 type: string
+ *                 description: User's biography
+ *               dateOfBirth:
+ *                 type: string
+ *                 format: date
+ *                 description: User's date of birth
+ *               gender:
+ *                 type: string
+ *                 description: User's gender
+ *               phoneNumber:
+ *                 type: string
+ *                 description: User's phone number
+ *               country:
+ *                 type: string
+ *                 description: User's country
+ *               language:
+ *                 type: string
+ *                 description: User's preferred language
+ *               preferences:
+ *                 type: object
+ *                 description: User's preferences
+ *               profilePicture:
+ *                 type: string
+ *                 format: binary
+ *                 description: User's profile picture
+ *     responses:
+ *       200:
+ *         description: Profile updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Profile updated successfully
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     role:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                     profilePicture:
+ *                       type: string
+ *                     bio:
+ *                       type: string
+ *                     dateOfBirth:
+ *                       type: string
+ *                       format: date
+ *                     gender:
+ *                       type: string
+ *                     phoneNumber:
+ *                       type: string
+ *                     country:
+ *                       type: string
+ *                     language:
+ *                       type: string
+ *                     preferences:
+ *                       type: object
+ *                     updatedAt:
+ *                       type: string
+ *                       format: date-time
+ *       400:
+ *         description: Bad request - Invalid input data
+ *       401:
+ *         description: Unauthorized - User not logged in
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ *
  * /api/admin/users:
  *   get:
  *     summary: Get all users (Admin only)

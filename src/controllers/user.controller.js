@@ -71,6 +71,87 @@ export const getAllUsers = async (c) => {
   }
 }
 
+// Add this new function for user profile update
+// Update user profile (for the user themselves)
+export const updateUserProfile = async (c) => {
+  try {
+    const userId = c.get('user')._id // Get the authenticated user's ID
+    const updates = await c.req.json()
+    const uploads = c.get('uploads') || {}
+    
+    // Fields that users are allowed to update
+    const allowedUpdates = [
+      'name', 
+      'bio', 
+      'dateOfBirth', 
+      'gender', 
+      'phoneNumber', 
+      'country', 
+      'language', 
+      'preferences'
+    ]
+    
+    // Filter out fields that aren't allowed to be updated
+    const filteredUpdates = Object.keys(updates)
+      .filter(key => allowedUpdates.includes(key))
+      .reduce((obj, key) => {
+        obj[key] = updates[key]
+        return obj
+      }, {})
+    
+    // Add profile picture if uploaded
+    if (uploads.profilePicture) {
+      filteredUpdates.profilePicture = uploads.profilePicture
+    }
+    
+    // Update the user
+    const user = await User.findByIdAndUpdate(
+      userId,
+      filteredUpdates,
+      { new: true, runValidators: true }
+    ).select('-password')
+
+    if (!user) {
+      throw new AppError("User not found", 404)
+    }
+
+    return c.json({
+      success: true,
+      message: "Profile updated successfully",
+      user
+    })
+  } catch (error) {
+    if (error instanceof AppError) {
+      return c.json({ success: false, message: error.message }, error.statusCode)
+    }
+    console.error("Update profile error:", error)
+    return c.json({ success: false, message: "Failed to update profile" }, 500)
+  }
+}
+
+// Get user profile (for the user themselves)
+export const getUserProfile = async (c) => {
+  try {
+    const userId = c.get('user')._id // Get the authenticated user's ID
+    
+    const user = await User.findById(userId).select('-password')
+    if (!user) {
+      throw new AppError("User not found", 404)
+    }
+
+    return c.json({
+      success: true,
+      user
+    })
+  } catch (error) {
+    if (error instanceof AppError) {
+      return c.json({ success: false, message: error.message }, error.statusCode)
+    }
+    console.error("Get profile error:", error)
+    return c.json({ success: false, message: "Failed to fetch profile" }, 500)
+  }
+}
+
 // Get single user (for admin)
 export const getUser = async (c) => {
   try {
