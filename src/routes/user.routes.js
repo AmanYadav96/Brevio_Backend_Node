@@ -9,7 +9,7 @@ import {
   getUserProfile
 } from '../controllers/user.controller.js'
 import { protect, restrictTo } from '../middlewares/auth.middleware.js'
-import { handleUpload } from '../middlewares/upload.middleware.js'
+import { handleUpload, optionalUpload } from '../middlewares/upload.middleware.js'
 
 const app = new Hono()
 
@@ -18,7 +18,7 @@ app.use('*', protect)
 
 // User profile routes (for regular users)
 app.get('/profile', getUserProfile)
-app.patch('/profile', handleUpload('USER'), updateUserProfile)
+app.patch('/profile', optionalUpload, updateUserProfile)
 
 // Admin routes
 app.get('/', restrictTo('admin'), getAllUsers)

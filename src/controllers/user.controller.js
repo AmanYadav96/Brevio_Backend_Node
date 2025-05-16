@@ -75,13 +75,21 @@ export const getAllUsers = async (c) => {
 // Update user profile (for the user themselves)
 export const updateUserProfile = async (c) => {
   try {
-    const userId = c.get('user')._id // Get the authenticated user's ID
+    // Log what we're getting from the context
+    console.log("Controller received userId:", c.get("userId"));
+    console.log("Controller received user:", c.get("user"));
+    
+    const userId = c.get("userId"); // Get the authenticated user's ID
+    
+    if (!userId) {
+      console.error("No userId found in context");
+      return c.json({ success: false, message: "User not authenticated" }, 401);
+    }
     
     // Check content type to determine how to process the request
     const contentType = c.req.header('Content-Type') || '';
     
     let updates = {};
-    let uploads = c.get('uploads') || {};
     
     // Handle different content types
     if (contentType.includes('application/json')) {
@@ -97,11 +105,6 @@ export const updateUserProfile = async (c) => {
           updates[key] = formData[key];
         }
       });
-      
-      // Handle file uploads separately if they exist
-      if (formData.profilePicture) {
-        uploads.profilePicture = formData.profilePicture;
-      }
     } else {
       // Invalid content type
       return c.json({ 
@@ -130,9 +133,10 @@ export const updateUserProfile = async (c) => {
         return obj
       }, {})
     
-    // Add profile picture if uploaded
+    // Handle file uploads if they exist in the request
+    const uploads = c.get('uploads') || {};
     if (uploads.profilePicture) {
-      filteredUpdates.profilePicture = uploads.profilePicture
+      filteredUpdates.profilePicture = uploads.profilePicture;
     }
     
     // Update the user
@@ -156,7 +160,7 @@ export const updateUserProfile = async (c) => {
       return c.json({ success: false, message: error.message }, error.statusCode)
     }
     console.error("Update profile error:", error)
-    return c.json({ success: false, message: "Failed to update profile" }, 500)
+    return c.json({ success: false, message: "Failed to update profile: " + error.message }, 500)
   }
 }
 

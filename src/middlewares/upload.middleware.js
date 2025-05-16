@@ -339,3 +339,16 @@ export const getUploadProgress = async (c) => {
 
 // For backward compatibility
 export const handleFileUpload = handleUpload
+
+// Optional upload middleware that doesn't fail if there's no file
+export const optionalUpload = async (c, next) => {
+  const contentType = c.req.header('Content-Type') || '';
+  
+  // Only process as upload if it's multipart/form-data
+  if (contentType.includes('multipart/form-data')) {
+    return upload(c, next);
+  }
+  
+  // Otherwise just continue
+  return next();
+};
