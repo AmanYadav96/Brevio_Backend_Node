@@ -1,11 +1,12 @@
 import User, { AuthProvider, UserStatus } from "../models/user.model.js"
 import jwt from "jsonwebtoken"
-import { OAuth2Client } from "google-auth-library"
-import axios from "axios"
-import { verifyAppleToken } from "../utils/appleAuth.js"
-
-// Initialize Google OAuth client
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
+import { 
+  GoogleAuthProvider, 
+  FacebookAuthProvider, 
+  OAuthProvider,
+  signInWithCredential 
+} from "firebase/auth"
+import { auth } from "../config/firebase.js"
 
 export class AuthService {
   // Generate JWT token
@@ -61,17 +62,18 @@ export class AuthService {
     return { user, token }
   }
 
-  // Google authentication
+  // Google authentication with Firebase
   async googleAuth(idToken) {
     try {
-      // Verify the token
-      const ticket = await googleClient.verifyIdToken({
-        idToken,
-        audience: process.env.GOOGLE_CLIENT_ID
-      })
+      // Create Google credential
+      const credential = GoogleAuthProvider.credential(idToken)
 
-      const payload = ticket.getPayload()
-      const { email, name, picture, sub: googleId } = payload
+      // Sign in with credential
+      const result = await signInWithCredential(auth, credential)
+      const firebaseUser = result.user
+
+      // Get user data
+      const { uid: googleId, email, displayName: name, photoURL: picture } = firebaseUser
 
       // Check if user exists
       let user = await User.findOne({ email })
@@ -90,15 +92,21 @@ export class AuthService {
           user.profilePicture = picture
         }
         
+        // Update Firebase UID if not already set
+        if (!user.firebaseUid) {
+          user.firebaseUid = firebaseUser.uid
+        }
+        
         await user.save()
       } else {
         // Create new user if doesn't exist
         user = await User.create({
           email,
-          name,
+          name: name || email.split('@')[0],
           profilePicture: picture || "",
           authProvider: AuthProvider.GOOGLE,
-          isEmailVerified: true,
+          isEmailVerified: firebaseUser.emailVerified,
+          firebaseUid: firebaseUser.uid,
           socialProfiles: {
             google: {
               id: googleId,
@@ -115,19 +123,23 @@ export class AuthService {
 
       return { user, token }
     } catch (error) {
+      console.error("Google auth error:", error)
       throw new Error("Google authentication failed: " + error.message)
     }
   }
 
-  // Facebook authentication
+  // Facebook authentication with Firebase
   async facebookAuth(accessToken) {
     try {
-      // Get user data from Facebook
-      const response = await axios.get(
-        `https://graph.facebook.com/me?fields=id,name,email,picture&access_token=${accessToken}`
-      )
+      // Create Facebook credential
+      const credential = FacebookAuthProvider.credential(accessToken)
 
-      const { id: facebookId, email, name, picture } = response.data
+      // Sign in with credential
+      const result = await signInWithCredential(auth, credential)
+      const firebaseUser = result.user
+
+      // Get user data
+      const { uid: facebookId, email, displayName: name, photoURL: picture } = firebaseUser
       
       if (!email) {
         throw new Error("Email not provided by Facebook")
@@ -143,11 +155,16 @@ export class AuthService {
           id: facebookId,
           email,
           name,
-          picture: picture?.data?.url
+          picture
         }
         
-        if (!user.profilePicture && picture?.data?.url) {
-          user.profilePicture = picture.data.url
+        if (!user.profilePicture && picture) {
+          user.profilePicture = picture
+        }
+        
+        // Update Firebase UID if not already set
+        if (!user.firebaseUid) {
+          user.firebaseUid = firebaseUser.uid
         }
         
         await user.save()
@@ -155,16 +172,17 @@ export class AuthService {
         // Create new user if doesn't exist
         user = await User.create({
           email,
-          name,
-          profilePicture: picture?.data?.url || "",
+          name: name || email.split('@')[0],
+          profilePicture: picture || "",
           authProvider: AuthProvider.FACEBOOK,
-          isEmailVerified: true,
+          isEmailVerified: firebaseUser.emailVerified,
+          firebaseUid: firebaseUser.uid,
           socialProfiles: {
             facebook: {
               id: facebookId,
               email,
               name,
-              picture: picture?.data?.url
+              picture
             }
           }
         })
@@ -175,16 +193,27 @@ export class AuthService {
 
       return { user, token }
     } catch (error) {
+      console.error("Facebook auth error:", error)
       throw new Error("Facebook authentication failed: " + error.message)
     }
   }
 
-  // Apple authentication
+  // Apple authentication with Firebase
   async appleAuth(idToken, userData) {
     try {
-      // Verify Apple ID token
-      const appleUserData = await verifyAppleToken(idToken)
-      const { sub: appleId, email } = appleUserData
+      // Create Apple credential
+      const provider = new OAuthProvider('apple.com')
+      const credential = provider.credential({
+        idToken: idToken,
+        rawNonce: userData.nonce // Include nonce if available
+      })
+
+      // Sign in with credential
+      const result = await signInWithCredential(auth, credential)
+      const firebaseUser = result.user
+
+      // Get user data
+      const { uid: appleId, email, displayName } = firebaseUser
       
       // Apple might not return email on subsequent logins
       if (!email && !userData.email) {
@@ -192,7 +221,7 @@ export class AuthService {
       }
 
       const userEmail = email || userData.email
-      const userName = userData.name || email.split('@')[0]
+      const userName = displayName || userData.name || userEmail.split('@')[0]
 
       // Check if user exists
       let user = await User.findOne({ email: userEmail })
@@ -206,6 +235,11 @@ export class AuthService {
           name: userName
         }
         
+        // Update Firebase UID if not already set
+        if (!user.firebaseUid) {
+          user.firebaseUid = firebaseUser.uid
+        }
+        
         await user.save()
       } else {
         // Create new user if doesn't exist
@@ -213,7 +247,8 @@ export class AuthService {
           email: userEmail,
           name: userName,
           authProvider: AuthProvider.APPLE,
-          isEmailVerified: true,
+          isEmailVerified: firebaseUser.emailVerified,
+          firebaseUid: firebaseUser.uid,
           socialProfiles: {
             apple: {
               id: appleId,
@@ -229,6 +264,7 @@ export class AuthService {
 
       return { user, token }
     } catch (error) {
+      console.error("Apple auth error:", error)
       throw new Error("Apple authentication failed: " + error.message)
     }
   }

@@ -18,11 +18,15 @@ import authService from "../services/auth.service.js"
 export const googleLogin = async (c) => {
   try {
     const { idToken } = await c.req.json()
+    
+    if (!idToken) {
+      return c.json({ success: false, message: "ID token is required" }, 400)
+    }
 
     // Create Google credential
     const credential = GoogleAuthProvider.credential(idToken)
 
-    // Sign in with credential
+    // Sign in with credential - this verifies the token with Firebase
     const result = await signInWithCredential(auth, credential)
     const firebaseUser = result.user
 
@@ -66,6 +70,9 @@ export const googleLogin = async (c) => {
     })
   } catch (error) {
     console.error("Google login error:", error)
+    if (error.code === 'auth/invalid-credential') {
+      return c.json({ success: false, message: "Invalid Google token" }, 401)
+    }
     return c.json({ success: false, message: "Google login failed" }, 500)
   }
 }
@@ -73,11 +80,15 @@ export const googleLogin = async (c) => {
 export const facebookLogin = async (c) => {
   try {
     const { accessToken } = await c.req.json()
+    
+    if (!accessToken) {
+      return c.json({ success: false, message: "Access token is required" }, 400)
+    }
 
     // Create Facebook credential
     const credential = FacebookAuthProvider.credential(accessToken)
 
-    // Sign in with credential
+    // Sign in with credential - this verifies the token with Firebase
     const result = await signInWithCredential(auth, credential)
     const firebaseUser = result.user
 
@@ -121,6 +132,9 @@ export const facebookLogin = async (c) => {
     })
   } catch (error) {
     console.error("Facebook login error:", error)
+    if (error.code === 'auth/invalid-credential') {
+      return c.json({ success: false, message: "Invalid Facebook token" }, 401)
+    }
     return c.json({ success: false, message: "Facebook login failed" }, 500)
   }
 }
@@ -201,6 +215,11 @@ export const login = async (c) => {
 export const googleAuth = async (c) => {
   try {
     const { idToken } = await c.req.json()
+    
+    if (!idToken) {
+      return c.json({ success: false, message: "ID token is required" }, 400)
+    }
+    
     const { user, token } = await authService.googleAuth(idToken)
     
     return c.json({
@@ -209,9 +228,13 @@ export const googleAuth = async (c) => {
       user
     })
   } catch (error) {
+    console.error("Google auth error:", error)
+    if (error.code === 'auth/invalid-credential') {
+      return c.json({ success: false, message: "Invalid Google token" }, 401)
+    }
     return c.json({
       success: false,
-      message: error.message
+      message: error.message || "Google authentication failed"
     }, 400)
   }
 }
@@ -220,6 +243,11 @@ export const googleAuth = async (c) => {
 export const facebookAuth = async (c) => {
   try {
     const { accessToken } = await c.req.json()
+    
+    if (!accessToken) {
+      return c.json({ success: false, message: "Access token is required" }, 400)
+    }
+    
     const { user, token } = await authService.facebookAuth(accessToken)
     
     return c.json({
@@ -228,9 +256,13 @@ export const facebookAuth = async (c) => {
       user
     })
   } catch (error) {
+    console.error("Facebook auth error:", error)
+    if (error.code === 'auth/invalid-credential') {
+      return c.json({ success: false, message: "Invalid Facebook token" }, 401)
+    }
     return c.json({
       success: false,
-      message: error.message
+      message: error.message || "Facebook authentication failed"
     }, 400)
   }
 }
@@ -239,6 +271,11 @@ export const facebookAuth = async (c) => {
 export const appleAuth = async (c) => {
   try {
     const { idToken, userData } = await c.req.json()
+    
+    if (!idToken) {
+      return c.json({ success: false, message: "ID token is required" }, 400)
+    }
+    
     const { user, token } = await authService.appleAuth(idToken, userData || {})
     
     return c.json({
@@ -247,9 +284,13 @@ export const appleAuth = async (c) => {
       user
     })
   } catch (error) {
+    console.error("Apple auth error:", error)
+    if (error.code === 'auth/invalid-credential') {
+      return c.json({ success: false, message: "Invalid Apple token" }, 401)
+    }
     return c.json({
       success: false,
-      message: error.message
+      message: error.message || "Apple authentication failed"
     }, 400)
   }
 }
