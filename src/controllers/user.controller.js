@@ -76,8 +76,39 @@ export const getAllUsers = async (c) => {
 export const updateUserProfile = async (c) => {
   try {
     const userId = c.get('user')._id // Get the authenticated user's ID
-    const updates = await c.req.json()
-    const uploads = c.get('uploads') || {}
+    
+    // Check content type to determine how to process the request
+    const contentType = c.req.header('Content-Type') || '';
+    
+    let updates = {};
+    let uploads = c.get('uploads') || {};
+    
+    // Handle different content types
+    if (contentType.includes('application/json')) {
+      // For JSON data
+      updates = await c.req.json();
+    } else if (contentType.includes('multipart/form-data') || contentType.includes('application/x-www-form-urlencoded')) {
+      // For form data (including file uploads)
+      const formData = await c.req.parseBody();
+      
+      // Extract regular fields from form data
+      Object.keys(formData).forEach(key => {
+        if (key !== 'profilePicture') {
+          updates[key] = formData[key];
+        }
+      });
+      
+      // Handle file uploads separately if they exist
+      if (formData.profilePicture) {
+        uploads.profilePicture = formData.profilePicture;
+      }
+    } else {
+      // Invalid content type
+      return c.json({ 
+        success: false, 
+        message: "Invalid Content-Type. Use 'application/json' for regular updates or 'multipart/form-data' for file uploads." 
+      }, 400);
+    }
     
     // Fields that users are allowed to update
     const allowedUpdates = [
