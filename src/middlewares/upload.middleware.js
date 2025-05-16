@@ -247,7 +247,12 @@ export const handleUpload = (type) => {
               })
               
               await s3Client.send(command)
-              uploads[field] = `https://${process.env.R2_BUCKET_NAME}.r2.dev/${fileName}`
+              // Update the URL format to use the public ID
+              // Add this near the top of your file with other constants
+              const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://pub-1a008632cfbe443fa4f631d71332310d.r2.dev';
+              
+              // Then use it in both places:
+              uploads[field] = `${R2_PUBLIC_URL}/${fileName}`;
             }
             
             // Update file upload status
@@ -346,7 +351,89 @@ export const optionalUpload = async (c, next) => {
   
   // Only process as upload if it's multipart/form-data
   if (contentType.includes('multipart/form-data')) {
-    return upload(c, next);
+    try {
+      // Process the form data directly without using FileUpload model
+      const formData = await c.req.formData();
+      const uploads = {};
+      const body = {};
+      
+      // Process each file in the form data
+      for (const [key, value] of formData.entries()) {
+        if (value instanceof Blob) {
+          // Handle file upload for profile picture
+          if (key === 'profilePicture') {
+            // Validate file type
+            if (!allowedImageTypes.includes(value.type)) {
+              return c.json({ 
+                success: false, 
+                message: `Invalid image type. Allowed types: ${allowedImageTypes.join(', ')}` 
+              }, 400);
+            }
+            
+            // Validate file size
+            if (value.size > maxFileSize.image) {
+              return c.json({ 
+                success: false, 
+                message: `File too large. Maximum size: ${(maxFileSize.image / (1024 * 1024))}MB` 
+              }, 400);
+            }
+            
+            // Upload to cloud storage
+            try {
+              const fileExt = path.extname(value.name || '.jpg');
+              const fileName = `users/profilePicture/${uuidv4()}${fileExt}`;
+              const fileBuffer = Buffer.from(await value.arrayBuffer());
+              
+              const command = new PutObjectCommand({
+                Bucket: process.env.R2_BUCKET_NAME,
+                Key: fileName,
+                Body: fileBuffer,
+                ContentType: value.type
+              });
+              
+              const s3Client = new S3Client({
+                region: 'auto',
+                endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+                credentials: {
+                  accessKeyId: process.env.R2_ACCESS_KEY_ID,
+                  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+                }
+              });
+              
+              await s3Client.send(command);
+              
+              // Use the correct URL format with the public ID instead of bucket name
+              uploads[key] = `https://pub-1a008632cfbe443fa4f631d71332310d.r2.dev/${fileName}`;
+            } catch (error) {
+              console.error('Error uploading to cloud storage:', error);
+              return c.json({ 
+                success: false, 
+                message: 'File upload failed: ' + error.message 
+              }, 500);
+            }
+          }
+        } else {
+          // Process non-file form data
+          try {
+            // Try to parse as JSON if possible
+            body[key] = JSON.parse(value);
+          } catch (e) {
+            // Otherwise use as is
+            body[key] = value;
+          }
+        }
+      }
+      
+      // Add uploads and body to context
+      c.set('uploads', uploads);
+      c.set('body', body);
+      
+      return next();
+    } catch (error) {
+      console.error('Optional upload error:', error);
+      // Continue without file upload if there's an error
+      return next();
+    }
   }
   
   // Otherwise just continue
