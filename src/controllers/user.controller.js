@@ -122,7 +122,8 @@ export const updateUserProfile = async (c) => {
       'phoneNumber', 
       'country', 
       'language', 
-      'preferences'
+      'preferences',
+      'role'
     ]
     
     // Filter out fields that aren't allowed to be updated

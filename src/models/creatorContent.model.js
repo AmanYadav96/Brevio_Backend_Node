@@ -178,7 +178,7 @@ const creatorContentSchema = new mongoose.Schema(
     channel: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Channel',
-      required: true
+    
     },
     // For SHORT_FILM content type
     videoUrl: {
