@@ -26,6 +26,13 @@ import creatorContentRoutes from "./src/routes/creatorContent.routes.js"
 import channelSubscriptionRoutes from "./src/routes/channelSubscription.routes.js"
 import sliderRoutes from "./src/routes/slider.routes.js"
 import categoryRoutes from "./src/routes/category.routes.js"
+// ... existing imports ...
+import adminRouter from './src/routes/admin.routes.js';
+
+// ... existing code ...
+
+
+
 
 const app = new Hono()
 
@@ -73,6 +80,8 @@ app.route("/api/categories", categoryRoutes)
 app.route("/api/donations", donationRoutes)
 app.route("/api/reports", reportRoutes)
 app.route("/api/contracts", contractRoutes) // Add contract routes
+// Admin routes
+app.route('/api/admin', adminRouter);
 
 // Error handling middleware
 app.use("*", errorHandler)

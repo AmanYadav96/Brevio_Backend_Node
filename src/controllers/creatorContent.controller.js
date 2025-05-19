@@ -102,6 +102,46 @@ export const createContent = async (c) => {
     
     const content = await CreatorContent.create(contentData)
     
+    // Send email notification
+    try {
+      const { default: emailService } = await import('../services/email.service.js');
+      
+      // Send email to creator
+      await emailService.sendContentUploadedEmail({
+        to: user.email,
+        userName: user.name,
+        contentTitle: content.title,
+        contentType: content.contentType,
+        contentId: content._id,
+        isAutoApproved: user.role === UserRole.ADMIN
+      });
+      
+      // If creator is not admin, send notification to admins
+      if (user.role !== UserRole.ADMIN) {
+        // Find admin emails
+        const admins = await User.find({ role: UserRole.ADMIN }).select('email name');
+        
+        if (admins.length > 0) {
+          // Send notification to each admin
+          for (const admin of admins) {
+            await emailService.sendContentReviewNotificationEmail({
+              to: admin.email,
+              adminName: admin.name,
+              creatorName: user.name,
+              contentTitle: content.title,
+              contentType: content.contentType,
+              contentId: content._id
+            });
+          }
+        }
+      }
+      
+      console.log(`Content upload email sent to ${user.email}`);
+    } catch (emailError) {
+      // Log error but don't fail the request
+      console.error("Error sending content upload email:", emailError);
+    }
+    
     return c.json({ 
       success: true, 
       content,
@@ -316,13 +356,31 @@ export const approveContent = async (c) => {
         adminApproved: true
       },
       { new: true }
-    )
+    ).populate('creator', 'name email');
     
     if (!content) {
       return c.json({ 
         success: false, 
         message: "Content not found" 
       }, 404)
+    }
+    
+    // Send approval email to creator
+    try {
+      const { default: emailService } = await import('../services/email.service.js');
+      
+      await emailService.sendContentApprovalEmail({
+        to: content.creator.email,
+        userName: content.creator.name,
+        contentTitle: content.title,
+        contentType: content.contentType,
+        contentId: content._id
+      });
+      
+      console.log(`Content approval email sent to ${content.creator.email}`);
+    } catch (emailError) {
+      // Log error but don't fail the request
+      console.error("Error sending content approval email:", emailError);
     }
     
     return c.json({ 
@@ -363,13 +421,32 @@ export const rejectContent = async (c) => {
         rejectionReason: reason || "Content does not meet platform guidelines"
       },
       { new: true }
-    )
+    ).populate('creator', 'name email');
     
     if (!content) {
       return c.json({ 
         success: false, 
         message: "Content not found" 
       }, 404)
+    }
+    
+    // Send rejection email to creator
+    try {
+      const { default: emailService } = await import('../services/email.service.js');
+      
+      await emailService.sendContentRejectionEmail({
+        to: content.creator.email,
+        userName: content.creator.name,
+        contentTitle: content.title,
+        contentType: content.contentType,
+        contentId: content._id,
+        rejectionReason: content.rejectionReason
+      });
+      
+      console.log(`Content rejection email sent to ${content.creator.email}`);
+    } catch (emailError) {
+      // Log error but don't fail the request
+      console.error("Error sending content rejection email:", emailError);
     }
     
     return c.json({ 

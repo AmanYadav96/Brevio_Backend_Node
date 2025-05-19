@@ -1,24 +1,19 @@
-import { Hono } from "hono"
-import { protect, restrictTo } from "../middlewares/auth.middleware.js"
-import {
-  getAllUsers,
-  getUser,
-  updateUser,
-  deleteUser,
-  getUserStats
-} from "../controllers/user.controller.js"
+import { Hono } from 'hono';
+import { protect } from '../middlewares/auth.middleware.js';
+import * as adminController from '../controllers/admin.controller.js';
 
-const router = new Hono()
+const adminRouter = new Hono();
 
-// Protect all routes and restrict to admin
-router.use("*", protect)
-router.use("*", restrictTo("admin"))
+// Protect all admin routes
+adminRouter.use('*', protect);
 
-// User management routes
-router.get("/users", getAllUsers)
-router.get("/users/stats", getUserStats)
-router.get("/users/:id", getUser)
-router.put("/users/:id", updateUser)
-router.delete("/users/:id", deleteUser)
+// Dashboard statistics
+adminRouter.get('/dashboard', adminController.getDashboardStats);
 
-export default router
+// Creator management
+adminRouter.get('/creators', adminController.getAllCreators);
+adminRouter.get('/creators/:creatorId', adminController.getCreatorById);
+adminRouter.patch('/creators/:creatorId/block', adminController.toggleCreatorBlock);
+adminRouter.delete('/creators/:creatorId', adminController.deleteCreator);
+
+export default adminRouter;
