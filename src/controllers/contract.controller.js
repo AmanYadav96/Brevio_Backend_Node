@@ -20,7 +20,7 @@ export const createContract = async (c) => {
     }
     
     // Check if user exists
-    const user = await User.findById(body.userId)
+    const user = await User.findById(body.userId).select('name email')
     if (!user) {
       throw new AppError('User not found', 404)
     }
@@ -80,6 +80,27 @@ export const createContract = async (c) => {
     }
     
     await contract.save()
+    
+    // If contract is being sent immediately, send email to user
+    if (contract.status === ContractStatus.SENT && contract.contractFile) {
+      try {
+        const { default: emailService } = await import('../services/email.service.js');
+        
+        await emailService.sendContractEmail({
+          to: user.email,
+          userName: user.name,
+          contractId: contract._id,
+          contractTitle: contract.title,
+          contractUrl: contract.contractFile,
+          contractType: contract.type
+        });
+        
+        console.log(`Contract email sent to ${user.email}`);
+      } catch (emailError) {
+        // Log error but don't fail the request
+        console.error("Error sending contract email:", emailError);
+      }
+    }
     
     return c.json({
       success: true,
@@ -316,6 +337,8 @@ export const sendContract = async (c) => {
     const body = await c.req.json()
     
     const contract = await Contract.findById(contractId)
+      .populate('userId', 'name email')
+    
     if (!contract) {
       throw new AppError('Contract not found', 404)
     }
@@ -338,7 +361,24 @@ export const sendContract = async (c) => {
     
     await contract.save()
     
-    // TODO: Send notification to user (email, in-app, etc.)
+    // Send email to user with contract
+    try {
+      const { default: emailService } = await import('../services/email.service.js');
+      
+      await emailService.sendContractEmail({
+        to: contract.userId.email,
+        userName: contract.userId.name,
+        contractId: contract._id,
+        contractTitle: contract.title,
+        contractUrl: contract.contractFile,
+        contractType: contract.type
+      });
+      
+      console.log(`Contract email sent to ${contract.userId.email}`);
+    } catch (emailError) {
+      // Log error but don't fail the request
+      console.error("Error sending contract email:", emailError);
+    }
     
     return c.json({
       success: true,

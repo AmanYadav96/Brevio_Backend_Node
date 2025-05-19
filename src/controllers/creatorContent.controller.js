@@ -393,7 +393,6 @@ export const getContentById = async (c) => {
     
     const content = await CreatorContent.findById(contentId)
       .populate('creator', 'name username profilePicture')
-      .populate('channel', 'name logo')
       .populate('genres', 'name')
     
     if (!content) {
@@ -426,7 +425,6 @@ export const getAllContent = async (c) => {
       orientation, 
       status,
       creatorId,
-      channelId,
       search,
       sort = 'createdAt',
       order = 'desc'
@@ -439,7 +437,6 @@ export const getAllContent = async (c) => {
     if (orientation) query.orientation = orientation
     if (status) query.status = status
     if (creatorId) query.creator = creatorId
-    if (channelId) query.channel = channelId
     
     // Search by title or description
     if (search) {
@@ -466,7 +463,6 @@ export const getAllContent = async (c) => {
     const [content, total] = await Promise.all([
       CreatorContent.find(query)
         .populate('creator', 'name username profilePicture')
-        .populate('channel', 'name logo')
         .sort(sortOptions)
         .skip(skip)
         .limit(parseInt(limit)),

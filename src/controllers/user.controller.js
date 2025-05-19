@@ -86,6 +86,12 @@ export const updateUserProfile = async (c) => {
       return c.json({ success: false, message: "User not authenticated" }, 401);
     }
     
+    // Get the current user to check if role is changing
+    const currentUser = await User.findById(userId);
+    if (!currentUser) {
+      throw new AppError("User not found", 404);
+    }
+    
     // Check content type to determine how to process the request
     const contentType = c.req.header('Content-Type') || '';
     
@@ -140,6 +146,11 @@ export const updateUserProfile = async (c) => {
       filteredUpdates.profilePicture = uploads.profilePicture;
     }
     
+    // Check if role is being updated to creator
+    const isBecomingCreator = 
+      filteredUpdates.role === 'creator' && 
+      currentUser.role !== 'creator';
+    
     // Update the user
     const user = await User.findByIdAndUpdate(
       userId,
@@ -151,9 +162,41 @@ export const updateUserProfile = async (c) => {
       throw new AppError("User not found", 404)
     }
 
+    // If user is becoming a creator, create contract and send email
+    if (isBecomingCreator) {
+      try {
+        // Import required services
+        const { default: contractService } = await import('../services/contract.service.js');
+        const { default: emailService } = await import('../services/email.service.js');
+        
+        // Generate creator contract
+        const contract = await contractService.generateCreatorContract({
+          userId: user._id,
+          userName: user.name,
+          userEmail: user.email,
+          creationDate: new Date()
+        });
+        
+        // Send email with contract
+        await emailService.sendCreatorContractEmail({
+          to: user.email,
+          userName: user.name,
+          contractId: contract._id,
+          contractUrl: contract.contractFile
+        });
+        
+        console.log(`Creator contract created and sent to ${user.email}`);
+      } catch (contractError) {
+        // Log error but don't fail the request
+        console.error("Error creating/sending creator contract:", contractError);
+      }
+    }
+
     return c.json({
       success: true,
-      message: "Profile updated successfully",
+      message: isBecomingCreator ? 
+        "Profile updated successfully. Creator contract has been sent to your email." : 
+        "Profile updated successfully",
       user
     })
   } catch (error) {
