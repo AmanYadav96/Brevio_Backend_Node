@@ -34,8 +34,20 @@ const fileUploadSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['pending', 'completed', 'failed'],
+      enum: ['pending', 'uploading', 'chunking', 'complete', 'completed', 'failed'],
       default: 'pending'
+    },
+    progress: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100
+    },
+    url: {
+      type: String
+    },
+    error: {
+      type: String
     }
   },
   { timestamps: true }

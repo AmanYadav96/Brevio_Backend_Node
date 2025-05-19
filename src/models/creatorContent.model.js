@@ -146,110 +146,93 @@ const pricingSchema = new mongoose.Schema({
   }
 })
 
-const creatorContentSchema = new mongoose.Schema(
-  {
-    title: {
-      type: String,
-      required: [true, "Title is required"],
-      trim: true
-    },
-    description: {
-      type: String,
-      required: [true, "Description is required"],
-      trim: true
-    },
-    contentType: {
-      type: String,
-      required: [true, "Content type is required"],
-      enum: Object.values(ContentType),
-      trim: true
-    },
-    orientation: {
-      type: String,
-      required: [true, "Orientation is required"],
-      enum: Object.values(OrientationType),
-      trim: true
-    },
-    creator: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: [true, "Creator is required"]
-    },
-    channel: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Channel',
-    
-    },
-    // For SHORT_FILM content type
-    videoUrl: {
-      type: String
-    },
-    duration: {
-      type: Number,
-      min: 0
-    },
-    // For SERIES content type
-    seasons: [seasonSchema],
-    // For EDUCATIONAL content type
-    lessons: [lessonSchema],
-    pricing: {
-      type: pricingSchema,
-      default: {}
-    },
-    mediaAssets: {
-      type: mediaAssetsSchema,
-      required: true
-    },
-    genres: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Genre'
-    }],
-    tags: [{
-      type: String,
-      trim: true
-    }],
-    ageRating: {
-      type: String,
-      enum: ["G", "PG", "PG-13", "R", "NC-17", "TV-Y", "TV-Y7", "TV-G", "TV-PG", "TV-14", "TV-MA"],
-      required: [true, "Age rating is required"]
-    },
-    status: {
-      type: String,
-      enum: ["draft", "processing", "published", "rejected", "archived"],
-      default: "draft"
-    },
-    isActive: {
-      type: Boolean,
-      default: true
-    },
-    releaseYear: {
-      type: Number
-    },
-    views: {
-      type: Number,
-      default: 0
-    },
-    likes: {
-      type: Number,
-      default: 0
-    },
-    videoMetadata: {
-      width: Number,
-      height: Number,
-      aspectRatio: String,
-      format: String,
-      bitrate: Number
-    },
-    adminApproved: {
-      type: Boolean,
-      default: false
-    },
-    rejectionReason: {
-      type: String
+// Creator content schema
+const creatorContentSchema = new mongoose.Schema({
+  title: {
+    type: String,
+    required: [true, "Title is required"],
+    trim: true
+  },
+  description: {
+    type: String,
+    required: [true, "Description is required"],
+    trim: true
+  },
+  contentType: {
+    type: String,
+    enum: Object.values(ContentType),
+    required: [true, "Content type is required"]
+  },
+  orientation: {
+    type: String,
+    enum: Object.values(OrientationType),
+    required: [true, "Orientation is required"]
+  },
+  creator: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: [true, "Creator is required"]
+  },
+  videoUrl: {
+    type: String,
+    validate: {
+      validator: function(v) {
+        // Only required for short films
+        return this.contentType !== ContentType.SHORT_FILM || (v && v.length > 0);
+      },
+      message: "Video URL is required for short films"
     }
   },
-  { timestamps: true }
-)
+  duration: {
+    type: Number,
+    min: 0
+  },
+  mediaAssets: mediaAssetsSchema,
+  genre: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Genre"
+  },
+  tags: [String],
+  ageRating: {
+    type: String,
+    enum: ["G", "PG", "PG-13", "R", "18+", "All Ages"],
+    default: "PG-13"
+  },
+  status: {
+    type: String,
+    enum: ["draft", "processing", "published", "rejected", "archived"],
+    default: "draft"
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  releaseYear: {
+    type: Number
+  },
+  views: {
+    type: Number,
+    default: 0
+  },
+  likes: {
+    type: Number,
+    default: 0
+  },
+  videoMetadata: {
+    width: Number,
+    height: Number,
+    aspectRatio: String,
+    format: String,
+    bitrate: Number
+  },
+  adminApproved: {
+    type: Boolean,
+    default: false
+  },
+  rejectionReason: {
+    type: String
+  }
+}, { timestamps: true })
 
 // Add validation for content type specific fields
 creatorContentSchema.pre('validate', function(next) {

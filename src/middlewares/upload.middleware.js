@@ -124,13 +124,22 @@ export const handleUpload = (type) => {
       const fileUploads = []
       const userId = c.get('user')?._id
       
-      // Get upload configuration
-      const uploadConfig = uploadTypes[type] || {
-        folder: 'misc',
+      // Normalize the type to match our uploadTypes keys
+      const normalizedType = typeof type === 'string' 
+        ? type.toUpperCase().replace(/([A-Z])/g, '_$1').replace(/^_/, '')
+        : '';
+      
+      console.log(`Original type: ${type}, Normalized type: ${normalizedType}`);
+      
+      // Get upload configuration - try multiple ways to match the type
+      const uploadConfig = uploadTypes[normalizedType] || uploadTypes[type] || {
+        folder: 'creator-content', // Default to creator-content instead of misc
         fields: Array.from(formData.keys()).filter(key => 
           formData.get(key) instanceof Blob
         )
-      }
+      };
+      
+      console.log(`Using upload type: ${type}, folder: ${uploadConfig.folder}`);
       
       // Process each file in the form data
       for (const field of uploadConfig.fields) {
@@ -174,9 +183,35 @@ export const handleUpload = (type) => {
           // Create file upload tracking record if user is authenticated
           let fileUpload = null
           if (userId) {
-            // Convert type to uppercase for enum compatibility
-            const modelTypeFormatted = type === 'CREATOR_CONTENT' ? 'CREATOR_CONTENT' : 
-                                      type.toUpperCase ? type.toUpperCase() : type;
+            // Map the upload type to valid enum values in the FileUpload model
+            // The enum values in the model are: 'Content', 'Advertisement', 'Channel', 'Video', 'Other'
+            const modelTypeMap = {
+              'creatorContent': 'Content',
+              'CREATOR_CONTENT': 'Content',
+              'content': 'Content',
+              'CONTENT': 'Content',
+              'video': 'Video',
+              'VIDEO': 'Video',
+              'channel': 'Channel',
+              'CHANNEL': 'Channel',
+              'advertisement': 'Advertisement',
+              'ADVERTISEMENT': 'Advertisement',
+              'episode': 'Other',
+              'EPISODE': 'Other',
+              'lesson': 'Other',
+              'LESSON': 'Other',
+              'report': 'Other',
+              'REPORT': 'Other',
+              'contract': 'Other',
+              'CONTRACT': 'Other',
+              'user': 'Other',
+              'USER': 'Other'
+            };
+            
+            // Get the mapped value or use 'Other' as default
+            const modelTypeFormatted = modelTypeMap[type] || 'Other';
+            
+            console.log(`Using model type: ${modelTypeFormatted} (original: ${type})`);
             
             fileUpload = new FileUpload({
               userId,
@@ -184,7 +219,7 @@ export const handleUpload = (type) => {
               fileSize: file.size,
               fileType: file.type,
               uploadPath: `${uploadConfig.folder}/${field}`,
-              modelType: modelTypeFormatted, // Use the formatted model type
+              modelType: modelTypeFormatted,
               status: 'pending'
             })
             
@@ -290,48 +325,39 @@ export const handleUpload = (type) => {
                 });
               }
             } else {
-              // Use the existing uploadToR2 utility if available
-              if (typeof uploadToR2 === 'function') {
-                // Update progress to show starting
-                if (fileUpload) {
-                  await FileUpload.findByIdAndUpdate(fileUpload._id, {
-                    status: 'uploading',
-                    progress: 0
-                  });
-                }
-                
-                const fileUrl = await uploadToR2(
-                  file,
-                  `${uploadConfig.folder}/${field}`,
-                  userId,
-                  { 
-                    model: type, 
-                    documentId: 'pending',
-                    onProgress: async (progress) => {
-                      // Update progress in database
-                      if (fileUpload) {
-                        await FileUpload.findByIdAndUpdate(fileUpload._id, {
-                          progress: Math.round(progress)
-                        });
-                      }
-                    }
-                  }
-                );
-                uploads[field] = fileUrl;
-              } else {
-                // Fallback to direct S3 implementation
-                const fileExt = path.extname(file.name || '');
-                const fileName = `${uploadConfig.folder}/${field}/${uuidv4()}${fileExt}`;
-                const fileBuffer = Buffer.from(await file.arrayBuffer());
-                
-                // Update progress to show starting
-                if (fileUpload) {
-                  await FileUpload.findByIdAndUpdate(fileUpload._id, {
-                    status: 'uploading',
-                    progress: 0
-                  });
-                }
-                
+              // ALWAYS use direct S3 implementation instead of uploadToR2
+              // This avoids all the validation errors with the File model
+              const fileExt = path.extname(file.name || '');
+              const fileName = `${uploadConfig.folder}/${field}/${uuidv4()}${fileExt}`;
+              const fileBuffer = Buffer.from(await file.arrayBuffer());
+              
+              // Update progress to show starting
+              if (fileUpload) {
+                await FileUpload.findByIdAndUpdate(fileUpload._id, {
+                  status: 'uploading',
+                  progress: 0
+                });
+              }
+              
+              // Create a new S3 client for each upload to avoid connection issues
+              const s3Client = new S3Client({
+                region: 'auto',
+                endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+                credentials: {
+                  accessKeyId: process.env.R2_ACCESS_KEY_ID,
+                  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+                },
+                forcePathStyle: true // Add this to force path style URLs
+              });
+              
+              // Update progress to 50% before sending
+              if (fileUpload) {
+                await FileUpload.findByIdAndUpdate(fileUpload._id, {
+                  progress: 50
+                });
+              }
+              
+              try {
                 const command = new PutObjectCommand({
                   Bucket: process.env.R2_BUCKET_NAME,
                   Key: fileName,
@@ -339,41 +365,61 @@ export const handleUpload = (type) => {
                   ContentType: file.type
                 });
                 
-                const s3Client = new S3Client({
-                  region: 'auto',
-                  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-                  credentials: {
-                    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-                    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-                  }
-                });
-                
-                // Update progress to 50% before sending
-                if (fileUpload) {
-                  await FileUpload.findByIdAndUpdate(fileUpload._id, {
-                    progress: 50
-                  });
-                }
-                
                 await s3Client.send(command);
                 
-                // Update progress to 100% after sending
+                // Set the URL and update progress
+                uploads[field] = `${R2_PUBLIC_URL}/${fileName}`;
+                
+                // Update file upload status
                 if (fileUpload) {
                   await FileUpload.findByIdAndUpdate(fileUpload._id, {
-                    progress: 100
+                    status: 'complete',
+                    progress: 100,
+                    url: uploads[field]
                   });
                 }
+              } catch (uploadError) {
+                console.error('S3 upload error details:', uploadError);
                 
-                uploads[field] = `${R2_PUBLIC_URL}/${fileName}`;
-              }
-              
-              // Update file upload status
-              if (fileUpload) {
-                await FileUpload.findByIdAndUpdate(fileUpload._id, {
-                  status: 'complete',
-                  progress: 100,
-                  url: uploads[field]
-                });
+                // Try an alternative approach with different settings
+                try {
+                  console.log('Trying alternative upload approach...');
+                  
+                  // Create a new client with different settings
+                  const altS3Client = new S3Client({
+                    region: 'auto',
+                    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+                    credentials: {
+                      accessKeyId: process.env.R2_ACCESS_KEY_ID,
+                      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+                    },
+                    forcePathStyle: false
+                  });
+                  
+                  const altCommand = new PutObjectCommand({
+                    Bucket: process.env.R2_BUCKET_NAME,
+                    Key: fileName,
+                    Body: fileBuffer,
+                    ContentType: file.type
+                  });
+                  
+                  await altS3Client.send(altCommand);
+                  
+                  // Set the URL and update progress
+                  uploads[field] = `${R2_PUBLIC_URL}/${fileName}`;
+                  
+                  // Update file upload status
+                  if (fileUpload) {
+                    await FileUpload.findByIdAndUpdate(fileUpload._id, {
+                      status: 'complete',
+                      progress: 100,
+                      url: uploads[field]
+                    });
+                  }
+                } catch (altError) {
+                  console.error('Alternative upload approach failed:', altError);
+                  throw uploadError; // Throw the original error
+                }
               }
             }
           } catch (error) {
@@ -399,35 +445,48 @@ export const handleUpload = (type) => {
       for (const [key, value] of formData.entries()) {
         if (!(value instanceof Blob)) {
           try {
-            // Try to parse as JSON if possible
-            body[key] = JSON.parse(value)
+            // Only try to parse as JSON if it's a valid JSON string
+            if (typeof value === 'string' && 
+                ((value.startsWith('{') && value.endsWith('}')) || 
+                 (value.startsWith('[') && value.endsWith(']')))) {
+              try {
+                body[key] = JSON.parse(value);
+              } catch (jsonError) {
+                console.warn(`Invalid JSON in field ${key}, using as string:`, value);
+                body[key] = value;
+              }
+            } else {
+              // For non-JSON strings, just use the value directly
+              body[key] = value;
+            }
           } catch (e) {
-            // Otherwise use as is
-            body[key] = value
+            console.warn(`Error processing form field ${key}:`, e.message);
+            // If any error occurs, use the raw value
+            body[key] = value;
           }
         }
       }
       
-      // Add uploads and body to context
-      c.set('uploads', uploads)
-      c.set('body', body)
-      c.set('fileUploads', fileUploads)
+      // Add a debug log to see what's being passed to the controller
+      console.log('Body being passed to controller:', JSON.stringify(body, null, 2));
       
-      // Add a response interceptor to include file upload IDs in the response
-      const originalHandler = c.res;
-      c.res = {
-        ...originalHandler,
-        json: (data, status) => {
-          // If it's a success response, add the file upload IDs
-          if (data.success !== false && fileUploads.length > 0) {
-            data.fileUploads = fileUploads.map(upload => ({
-              id: upload._id.toString(),
-              field: upload.uploadPath.split('/').pop(),
-              status: upload.status
-            }));
-          }
-          return originalHandler.json(data, status);
+      // Add uploads and body to context
+      c.set('uploads', uploads);
+      c.set('body', body);
+      c.set('fileUploads', fileUploads);
+      
+      // Fix the response interceptor
+      const originalJson = c.json.bind(c);
+      c.json = (data, status) => {
+        // If it's a success response, add the file upload IDs
+        if (data && data.success !== false && fileUploads.length > 0) {
+          data.fileUploads = fileUploads.map(upload => ({
+            id: upload._id.toString(),
+            field: upload.uploadPath.split('/').pop(),
+            status: upload.status
+          }));
         }
+        return originalJson(data, status);
       };
       
       await next()

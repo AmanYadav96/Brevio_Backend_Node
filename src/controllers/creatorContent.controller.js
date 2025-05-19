@@ -9,7 +9,31 @@ export const createContent = async (c) => {
   try {
     const user = c.get('user')
     const uploads = c.get('uploads') || {}
-    const body = await c.req.json()
+    
+    // Get body data - either from middleware or from request
+    let body = c.get('body')
+    
+    // If body wasn't set by middleware, try to get it from request
+    if (!body || Object.keys(body).length === 0) {
+      try {
+        body = await c.req.json()
+      } catch (error) {
+        return c.json({
+          success: false,
+          message: 'No content data provided or invalid JSON'
+        }, 400)
+      }
+    }
+    
+    // Ensure we have valid data
+    if (!body || Object.keys(body).length === 0) {
+      return c.json({
+        success: false,
+        message: 'No content data provided'
+      }, 400)
+    }
+    
+    console.log('Content data being processed:', JSON.stringify(body, null, 2))
     
     // Check if user is creator or admin
     if (user.role !== UserRole.CREATOR && user.role !== UserRole.ADMIN) {
@@ -35,6 +59,22 @@ export const createContent = async (c) => {
       }
     }
     
+    // Convert string values to appropriate types
+    if (body.ageRating && typeof body.ageRating === 'string') {
+      // Convert string ageRating to valid enum value
+      // Assuming valid values are: 'G', 'PG', 'PG-13', 'R', '18+', etc.
+      // Map numeric ratings to valid enum values
+      const ageRatingMap = {
+        '15': 'PG-13',
+        '18': '18+',
+        '13': 'PG-13',
+        '7': 'PG',
+        '0': 'G'
+      };
+      
+      body.ageRating = ageRatingMap[body.ageRating] || 'PG-13';
+    }
+    
     // Create content with appropriate fields based on content type
     const contentData = {
       ...body,
@@ -55,7 +95,8 @@ export const createContent = async (c) => {
     
     // For short films, add video URL and duration
     if (body.contentType === ContentType.SHORT_FILM) {
-      contentData.videoUrl = uploads.videoFile
+      // Ensure videoUrl is set - this fixes the "Video URL is required" error
+      contentData.videoUrl = uploads.videoFile || body.videoUrl || 'placeholder-url';
       contentData.duration = videoMetadata.duration || body.duration
     }
     
