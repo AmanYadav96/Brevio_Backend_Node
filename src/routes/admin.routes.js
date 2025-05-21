@@ -8,7 +8,7 @@ const adminRouter = new Hono();
 adminRouter.use('*', protect);
 
 // Dashboard statistics
-adminRouter.get('/dashboard', adminController.getDashboardStats);
+adminRouter.get('/creators-stats', adminController.getDashboardStats);
 
 // Creator management
 adminRouter.get('/creators', adminController.getAllCreators);
