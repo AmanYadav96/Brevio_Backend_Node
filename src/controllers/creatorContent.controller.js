@@ -470,7 +470,7 @@ export const getContentById = async (c) => {
     
     const content = await CreatorContent.findById(contentId)
       .populate('creator', 'name username profilePicture')
-      .populate('genres', 'name')
+      // Removed the genres population since it's not in the schema
     
     if (!content) {
       return c.json({ 
