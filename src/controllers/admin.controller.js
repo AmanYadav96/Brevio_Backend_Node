@@ -279,6 +279,9 @@ export const toggleCreatorBlock = async (c) => {
     if (action === 'block') {
       creator.isActive = false;
     }
+    if (action === 'unblock') {
+      creator.isActive = true;
+    }
     
     await creator.save();
     
