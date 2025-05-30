@@ -7,7 +7,7 @@
 
 /**
  * @swagger
- * /api/admin/creator-stats:
+ * /api/admin/creators-stats:
  *   get:
  *     summary: Get admin dashboard statistics
  *     tags: [Admin]
