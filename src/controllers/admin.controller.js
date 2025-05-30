@@ -1,4 +1,4 @@
-import User, { UserRole } from '../models/user.model.js';
+import User, { UserRole,UserStatus } from '../models/user.model.js';
 import CreatorContent, { ContentType } from '../models/creatorContent.model.js';
 import Contract, { ContractStatus } from '../models/contract.model.js';
 import { AppError } from '../utils/app-error.js';
@@ -93,72 +93,64 @@ export const getDashboardStats = async (c) => {
 export const getAllCreators = async (c) => {
   try {
     const user = c.get('user');
-    
-    // Check if user is admin
+
+    // Only admin allowed
     if (user.role !== UserRole.ADMIN) {
       throw new AppError('Unauthorized access', 403);
     }
-    
+
     const page = parseInt(c.req.query('page')) || 1;
     const limit = parseInt(c.req.query('limit')) || 10;
     const search = c.req.query('search') || '';
-    const status = c.req.query('status'); // active, blocked, all
+    const status = c.req.query('status'); // 'active', 'inactive', or 'all'
     const sortBy = c.req.query('sortBy') || 'createdAt';
-    const sortOrder = c.req.query('sortOrder') || 'desc';
-    
-    // Build query
+    const sortOrder = c.req.query('sortOrder') === 'asc' ? 1 : -1;
+
+    // Base query for creators
     const query = { role: UserRole.CREATOR };
-    
-    // Add search filter
+
+    // Search filter
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } }
       ];
     }
-    
-    // Add status filter
+
+    // Status filter
     if (status === 'active') {
-      query.isActive = true;
-      query.isBlocked = false;
-    } else if (status === 'blocked') {
-      query.isBlocked = true;
+      query.status = UserStatus.ACTIVE;
+    } else if (status === 'inactive') {
+      query.status = UserStatus.INACTIVE;
     }
-    
-    // Calculate pagination
+
     const skip = (page - 1) * limit;
-    
-    // Sort options
-    const sort = {};
-    sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
-    
-    // Get creators with pagination
+
+    // Fetch creators and count
     const [creators, total] = await Promise.all([
       User.find(query)
-        .sort(sort)
+        .sort({ [sortBy]: sortOrder })
         .skip(skip)
         .limit(limit)
-        .select('name email isActive isBlocked createdAt subscriptionPlan'),
+        .select('name email status createdAt subscriptionPlan'),
       User.countDocuments(query)
     ]);
-    
-    // Get additional data for each creator
+
+    // Enhance creator info
     const creatorsWithDetails = await Promise.all(
       creators.map(async (creator) => {
-        // Get content count
         const contentCount = await CreatorContent.countDocuments({ creator: creator._id });
-        
-        // Get contract status
-        const contract = await Contract.findOne({ 
+
+        const contract = await Contract.findOne({
           userId: creator._id,
           type: 'creator'
         }).sort({ createdAt: -1 });
-        
+
         return {
           _id: creator._id,
           name: creator.name,
           email: creator.email,
-          status: creator.isBlocked ? 'Blocked' : (creator.isActive ? 'Active' : 'Inactive'),
+          status: creator.status === UserStatus.ACTIVE ? 'Active' : 'Inactive',
           subscriptionPlan: creator.subscriptionPlan || 'Free',
           registeredDate: creator.createdAt,
           totalContent: contentCount,
@@ -166,7 +158,7 @@ export const getAllCreators = async (c) => {
         };
       })
     );
-    
+
     return c.json({
       success: true,
       creators: creatorsWithDetails,
@@ -185,7 +177,6 @@ export const getAllCreators = async (c) => {
     }, error.statusCode || 500);
   }
 };
-
 /**
  * Get creator details by ID
  * @param {Object} c - Context
@@ -297,10 +288,10 @@ export const toggleCreatorBlock = async (c) => {
     
     // If blocking, also set isActive to false
     if (action === 'block') {
-      creator.isActive = false;
+      creator.status = UserStatus.INACTIVE;
     }
     if (action === 'unblock') {
-      creator.isActive = true;
+      creator.status = UserStatus.ACTIVE;
     }
     
     await creator.save();
