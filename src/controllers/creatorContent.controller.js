@@ -16,12 +16,19 @@ export const createContent = async (c) => {
     // If body wasn't set by middleware, try to get it from request
     if (!body || Object.keys(body).length === 0) {
       try {
+        // Try to parse as JSON first
         body = await c.req.json()
-      } catch (error) {
-        return c.json({
-          success: false,
-          message: 'No content data provided or invalid JSON'
-        }, 400)
+      } catch (jsonError) {
+        try {
+          // If JSON parsing fails, try to parse as FormData
+          body = await c.req.parseBody()
+        } catch (formError) {
+          console.error('Failed to parse request body:', jsonError, formError)
+          return c.json({
+            success: false,
+            message: 'Failed to parse request body. Please ensure you are sending valid JSON or FormData.'
+          }, 400)
+        }
       }
     }
     
@@ -164,7 +171,24 @@ export const addEpisode = async (c) => {
     const user = c.get('user')
     const uploads = c.get('uploads') || {}
     const { contentId, seasonId } = c.req.param()
-    const body = await c.req.json()
+    
+    // Try to parse body with fallback
+    let body
+    try {
+      // Try to parse as JSON first
+      body = await c.req.json()
+    } catch (jsonError) {
+      try {
+        // If JSON parsing fails, try to parse as FormData
+        body = await c.req.parseBody()
+      } catch (formError) {
+        console.error('Failed to parse request body:', jsonError, formError)
+        return c.json({
+          success: false,
+          message: 'Failed to parse request body. Please ensure you are sending valid JSON or FormData.'
+        }, 400)
+      }
+    }
     
     // Find content and verify ownership
     const content = await CreatorContent.findById(contentId)
@@ -256,7 +280,24 @@ export const addLesson = async (c) => {
     const user = c.get('user')
     const uploads = c.get('uploads') || {}
     const { contentId } = c.req.param()
-    const body = await c.req.json()
+    
+    // Try to parse body with fallback
+    let body
+    try {
+      // Try to parse as JSON first
+      body = await c.req.json()
+    } catch (jsonError) {
+      try {
+        // If JSON parsing fails, try to parse as FormData
+        body = await c.req.parseBody()
+      } catch (formError) {
+        console.error('Failed to parse request body:', jsonError, formError)
+        return c.json({
+          success: false,
+          message: 'Failed to parse request body. Please ensure you are sending valid JSON or FormData.'
+        }, 400)
+      }
+    }
     
     // Find content and verify ownership
     const content = await CreatorContent.findById(contentId)
