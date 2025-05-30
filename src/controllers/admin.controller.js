@@ -250,7 +250,27 @@ export const toggleCreatorBlock = async (c) => {
   try {
     const user = c.get('user');
     const { creatorId } = c.req.param();
-    const { action } = await c.req.json();
+    
+    // Try to parse JSON body, but handle potential errors
+    let action;
+    try {
+      const body = await c.req.json();
+      action = body.action;
+    } catch (parseError) {
+      // If JSON parsing fails, try to get from URL query parameter
+      action = c.req.query('action');
+      
+      // If still no action, check if it's in form data
+      if (!action) {
+        try {
+          const formData = await c.req.parseBody();
+          action = formData.action;
+        } catch (formError) {
+          // If all parsing methods fail, return error
+          throw new AppError('Invalid request format. Action parameter is required', 400);
+        }
+      }
+    }
     
     // Check if user is admin
     if (user.role !== UserRole.ADMIN) {
