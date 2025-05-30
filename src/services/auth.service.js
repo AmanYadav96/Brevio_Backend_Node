@@ -18,7 +18,7 @@ export class AuthService {
 
   // Register with email and password
   async registerWithEmail(userData) {
-    const { email, password, name } = userData
+    const { email, password, name, role , username } = userData
 
     // Check if user already exists
     const existingUser = await User.findOne({ email })
@@ -26,11 +26,13 @@ export class AuthService {
       throw new Error("User already exists with this email")
     }
 
-    // Create new user
+    // Create new user with role (if provided)
     const user = await User.create({
       email,
       password,
       name,
+      username,
+      role: role || UserRole.USER, // Use provided role or default to USER
       authProvider: AuthProvider.LOCAL
     })
 

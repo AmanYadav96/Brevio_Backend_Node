@@ -4,8 +4,10 @@ import {
   login, 
   googleAuth, 
   facebookAuth, 
-  appleAuth 
+  appleAuth,
+  becomeCreator 
 } from "../controllers/auth.controller.js"
+import { protect } from "../middlewares/auth.middleware.js"
 
 const router = new Hono()
 
@@ -17,5 +19,8 @@ router.post("/login", login)
 router.post("/google", googleAuth)
 router.post("/facebook", facebookAuth)
 router.post("/apple", appleAuth)
+
+// Creator upgrade route
+router.post("/become-creator", protect, becomeCreator)
 
 export default router
