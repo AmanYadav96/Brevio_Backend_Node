@@ -119,7 +119,45 @@ export const uploadTypes = {
 export const handleUpload = (type) => {
   return async (c, next) => {
     try {
-      const formData = await c.req.formData()
+      // Try to parse as FormData
+      let formData;
+      try {
+        formData = await c.req.formData();
+      } catch (formDataError) {
+        console.error('FormData parsing error:', formDataError);
+        
+        // Check if this is a React Native request by examining Content-Type header
+        const contentType = c.req.header('Content-Type') || '';
+        if (contentType.includes('multipart/form-data')) {
+          // For React Native requests, try to parse the body manually
+          try {
+            const rawBody = await c.req.text();
+            console.log('Raw request body:', rawBody);
+            
+            // Try to parse the request as JSON first (fallback)
+            let body;
+            try {
+              body = await c.req.json();
+              // If we get here, it was valid JSON
+              c.set('body', body);
+              // No files to process, so skip to next middleware
+              return await next();
+            } catch (jsonError) {
+              // Not JSON, continue with manual FormData handling
+              console.log('Not a JSON request, continuing with manual parsing');
+            }
+          } catch (textError) {
+            console.error('Failed to read request body as text:', textError);
+          }
+        }
+        
+        // If we couldn't parse as FormData or handle React Native format, return error
+        return c.json({
+          success: false,
+          message: 'Failed to parse request body as FormData. Make sure you are sending a proper multipart/form-data request.'
+        }, 400);
+      }
+      
       const uploads = {}
       const fileUploads = []
       const userId = c.get('user')?._id
@@ -134,19 +172,47 @@ export const handleUpload = (type) => {
       // Get upload configuration - try multiple ways to match the type
       const uploadConfig = uploadTypes[normalizedType] || uploadTypes[type] || {
         folder: 'creator-content', // Default to creator-content instead of misc
-        fields: Array.from(formData.keys()).filter(key => 
-          formData.get(key) instanceof Blob
-        )
+        fields: Array.from(formData.keys()).filter(key => {
+          const value = formData.get(key);
+          // Check for both Blob instances and React Native file objects
+          return value instanceof Blob || 
+                 (value && typeof value === 'object' && value.uri && (value.type || value.name));
+        })
       };
       
       console.log(`Using upload type: ${type}, folder: ${uploadConfig.folder}`);
       
       // Process each file in the form data
       for (const field of uploadConfig.fields) {
-        const file = formData.get(field)
+        const fileData = formData.get(field);
         
-        if (file && file instanceof Blob) {
-          // Validate file type
+        // Handle both standard Blob files and React Native file objects
+        let file = fileData;
+        let fileName = '';
+        let fileType = '';
+        
+        // Check if this is a React Native file object
+        if (fileData && typeof fileData === 'object' && fileData.uri && !(fileData instanceof Blob)) {
+          console.log(`Processing React Native file object for field ${field}:`, fileData);
+          
+          // For React Native file objects, we need to create a Blob
+          // However, we can't actually create a Blob from the URI on the server side
+          // So we'll need to handle this differently - by using the file info directly
+          
+          fileName = fileData.name || `${field}-${Date.now()}.${fileData.uri.split('.').pop()}`;
+          fileType = fileData.type || 'application/octet-stream';
+          
+          // Since we can't create a real Blob from the URI, we'll set the URL directly
+          // This assumes the URI is already a valid URL that can be used directly
+          uploads[field] = fileData.uri;
+          
+          // Log what we're doing
+          console.log(`Setting direct URI for ${field}: ${uploads[field]}`);
+          
+          // Skip the rest of the file processing for this field
+          continue;
+        } else if (file && file instanceof Blob) {
+          // Standard file processing for browser-based uploads
           if ((field === 'videoFile' || field === 'trailer') && !allowedVideoTypes.includes(file.type)) {
             return c.json({ 
               success: false, 
@@ -443,6 +509,12 @@ export const handleUpload = (type) => {
       // Process non-file form data
       const body = {}
       for (const [key, value] of formData.entries()) {
+        // Skip file fields that we've already processed
+        if (uploadConfig.fields.includes(key)) {
+          continue;
+        }
+        
+        // Process non-file values
         if (!(value instanceof Blob)) {
           try {
             // Only try to parse as JSON if it's a valid JSON string
@@ -469,6 +541,7 @@ export const handleUpload = (type) => {
       
       // Add a debug log to see what's being passed to the controller
       console.log('Body being passed to controller:', JSON.stringify(body, null, 2));
+      console.log('Uploads being passed to controller:', uploads);
       
       // Add uploads and body to context
       c.set('uploads', uploads);
