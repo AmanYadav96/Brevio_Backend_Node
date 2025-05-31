@@ -135,25 +135,33 @@ export const handleUpload = (type) => {
             const rawBody = await c.req.text();
             
             // Create a custom FormData-like object
+            // Replace the customFormData implementation (around line 139) with this:
             const customFormData = {
               _map: new Map(),
-              set: function(key, value) {
+              set(key, value) {
                 this._map.set(key, value);
               },
-              get: function(key) {
+              get(key) {
                 return this._map.get(key);
               },
-              has: function(key) {
-                return this._map.has(key);
-              },
-              entries: function() {
+              entries() {
                 return this._map.entries();
               },
-              keys: function() {
+              // Add iterator to make it work with for...of loops
+              [Symbol.iterator]() {
+                return this._map.entries();
+              },
+              // Add keys method to mimic FormData
+              keys() {
                 return this._map.keys();
+              },
+              // Add has method to check if a key exists
+              has(key) {
+                return this._map.has(key);
               }
             };
             
+            // Then use customFormData.set
             // Try to parse the body as JSON first (as a fallback)
             try {
               const jsonBody = JSON.parse(rawBody);
@@ -235,11 +243,13 @@ export const handleUpload = (type) => {
                 }
                 
                 // Add entries and keys methods to mimic FormData
+                // Replace lines 238-243 with this:
                 customFormData.entries = function() {
-                  return this.entries();
+                  return this._map.entries();
                 };
+                
                 customFormData.get = function(key) {
-                  return this.get(key);
+                  return this._map.get(key);
                 };
                 
                 // Use our custom FormData object
