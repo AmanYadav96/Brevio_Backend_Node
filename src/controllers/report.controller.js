@@ -9,7 +9,9 @@ export const createReport = async (c) => {
   try {
     const userId = c.get('user')._id
     const uploads = c.get('uploads')
-    const body = await c.req.json()
+    
+    // OPTION 1: Use the body that was set by the upload middleware
+    const body = c.get('body')
     
     // Validate required fields
     if (!body.contentId || !body.contentType || !body.issueType || !body.description) {
@@ -42,10 +44,14 @@ export const createReport = async (c) => {
         creatorId = video.userId
         break
       
-      // Add cases for other content types as needed
-      // case ContentType.SHORT:
-      // case ContentType.SERIES:
-      // etc.
+      // Add case for SHORT content type
+      case ContentType.SHORT:
+        // Add logic to handle short content type
+        // For now, just use the content ID as the name
+        contentName = `Short content ${body.contentId}`
+        break
+      
+      // Add other cases as needed
       
       default:
         return c.json(createError(400, 'Content type not supported yet'), 400)

@@ -1,4 +1,4 @@
-import User, { AuthProvider, UserStatus } from "../models/user.model.js"
+import User, { AuthProvider, UserStatus, UserRole } from "../models/user.model.js"
 import jwt from "jsonwebtoken"
 import { 
   GoogleAuthProvider, 
@@ -18,7 +18,7 @@ export class AuthService {
 
   // Register with email and password
   async registerWithEmail(userData) {
-    const { email, password, name, role , username } = userData
+    const { email, password, name, username } = userData
 
     // Check if user already exists
     const existingUser = await User.findOne({ email })
@@ -26,13 +26,13 @@ export class AuthService {
       throw new Error("User already exists with this email")
     }
 
-    // Create new user with role (if provided)
+    // Create new user with default role
     const user = await User.create({
       email,
       password,
       name,
       username,
-      role: role || UserRole.USER, // Use provided role or default to USER
+      role: UserRole.USER, // Always default to USER role
       authProvider: AuthProvider.LOCAL
     })
 
