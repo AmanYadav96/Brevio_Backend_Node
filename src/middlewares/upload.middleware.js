@@ -131,20 +131,125 @@ export const handleUpload = (type) => {
         if (contentType.includes('multipart/form-data')) {
           // For React Native requests, try to parse the body manually
           try {
+            // Get the raw body as text
             const rawBody = await c.req.text();
-            console.log('Raw request body:', rawBody);
             
-            // Try to parse the request as JSON first (fallback)
-            let body;
+            // Create a custom FormData-like object
+            const customFormData = new Map();
+            const body = {};
+            
+            // Try to parse the body as JSON first (as a fallback)
             try {
-              body = await c.req.json();
-              // If we get here, it was valid JSON
-              c.set('body', body);
-              // No files to process, so skip to next middleware
+              const jsonBody = JSON.parse(rawBody);
+              c.set('body', jsonBody);
               return await next();
             } catch (jsonError) {
-              // Not JSON, continue with manual FormData handling
-              console.log('Not a JSON request, continuing with manual parsing');
+              // Not valid JSON, continue with boundary parsing
+              console.log('Not a JSON request, attempting to parse multipart data');
+              
+              // Extract the boundary from the Content-Type header
+              const boundaryMatch = contentType.match(/boundary=(?:"([^"]*)"|([^;]*))/);
+              if (boundaryMatch) {
+                const boundary = boundaryMatch[1] || boundaryMatch[2];
+                
+                // Split the body by boundary
+                const parts = rawBody.split(`--${boundary}`);
+                
+                // Process each part
+                for (const part of parts) {
+                  if (part.trim() && !part.includes('--\r\n')) {
+                    // Extract headers and content
+                    const [headerText, content] = part.split('\r\n\r\n');
+                    if (!headerText || !content) continue;
+                    
+                    // Parse the Content-Disposition header
+                    const nameMatch = headerText.match(/name="([^"]*)"/i);
+                    if (!nameMatch) continue;
+                    
+                    const name = nameMatch[1];
+                    
+                    // Check if this is a file field
+                    const filenameMatch = headerText.match(/filename="([^"]*)"/i);
+                    
+                    if (filenameMatch) {
+                      // This is a file field
+                      const filename = filenameMatch[1];
+                      
+                      // Extract content type
+                      const contentTypeMatch = headerText.match(/Content-Type:\s*([^\r\n]*)/i);
+                      const fileType = contentTypeMatch ? contentTypeMatch[1].trim() : 'application/octet-stream';
+                      
+                      // For React Native, the file content might be a JSON object with uri
+                      try {
+                        const fileData = JSON.parse(content.trim());
+                        if (fileData && fileData.uri) {
+                          // This is a React Native file object
+                          customFormData.set(name, {
+                            uri: fileData.uri,
+                            name: fileData.name || filename,
+                            type: fileData.type || fileType
+                          });
+                          
+                          // Also add to body for convenience
+                          body[name] = fileData;
+                        }
+                      } catch (e) {
+                        // Not JSON, treat as regular file content
+                        // (This would require more complex binary parsing for actual file data)
+                        console.log(`Field ${name} appears to be a file but couldn't parse content`);
+                      }
+                    } else {
+                      // This is a regular field
+                      const fieldValue = content.trim();
+                      customFormData.set(name, fieldValue);
+                      
+                      // Try to parse as JSON if it looks like JSON
+                      if ((fieldValue.startsWith('{') && fieldValue.endsWith('}')) || 
+                          (fieldValue.startsWith('[') && fieldValue.endsWith(']'))) {
+                        try {
+                          body[name] = JSON.parse(fieldValue);
+                        } catch (e) {
+                          body[name] = fieldValue;
+                        }
+                      } else {
+                        body[name] = fieldValue;
+                      }
+                    }
+                  }
+                }
+                
+                // Add entries and keys methods to mimic FormData
+                customFormData.entries = function() {
+                  return this.entries();
+                };
+                customFormData.get = function(key) {
+                  return this.get(key);
+                };
+                
+                // Use our custom FormData object
+                formData = customFormData;
+                c.set('body', body);
+                
+                // Process uploads
+                const uploads = {};
+                const fileUploads = [];
+                
+                // Process file fields
+                for (const [key, value] of formData.entries()) {
+                  if (value && typeof value === 'object' && value.uri) {
+                    // This is a React Native file object
+                    uploads[key] = value.uri;
+                    console.log(`Setting direct URI for ${key}: ${value.uri}`);
+                  }
+                }
+                
+                // Set uploads in context
+                c.set('uploads', uploads);
+                c.set('fileUploads', fileUploads);
+                
+                // Continue to next middleware
+                return await next();
+              }
             }
           } catch (textError) {
             console.error('Failed to read request body as text:', textError);
