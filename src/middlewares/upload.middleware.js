@@ -133,12 +133,14 @@ export const handleUpload = (type) => {
           try {
             // Get the raw body as text
             const rawBody = await c.req.text();
+            console.log('Raw request body length:', rawBody.length);
+            console.log('Content-Type header:', contentType);
             
-            // Create a custom FormData-like object
-            // Replace the customFormData implementation (around line 139) with this:
+            // Create a custom FormData-like object with proper implementation
             const customFormData = {
               _map: new Map(),
               set(key, value) {
+                console.log(`Setting form data: ${key}`, typeof value === 'object' ? 'Object' : value);
                 this._map.set(key, value);
               },
               get(key) {
@@ -161,36 +163,42 @@ export const handleUpload = (type) => {
               }
             };
             
-            // Then use customFormData.set
-            // Try to parse the body as JSON first (as a fallback)
-            try {
-              const jsonBody = JSON.parse(rawBody);
-              c.set('body', jsonBody);
-              return await next();
-            } catch (jsonError) {
-              // Not valid JSON, continue with boundary parsing
-              console.log('Not a JSON request, attempting to parse multipart data');
+            // Extract the boundary from the Content-Type header with more detailed logging
+            const boundaryMatch = contentType.match(/boundary=(?:"([^"]*)"|([^;]*))/);
+            if (boundaryMatch) {
+              const boundary = boundaryMatch[1] || boundaryMatch[2];
+              console.log('Detected boundary:', boundary);
               
-              // Extract the boundary from the Content-Type header
-              const boundaryMatch = contentType.match(/boundary=(?:"([^"]*)"|([^;]*))/);
-              if (boundaryMatch) {
-                const boundary = boundaryMatch[1] || boundaryMatch[2];
-                
-                // Split the body by boundary
-                const parts = rawBody.split(`--${boundary}`);
-                
-                // Process each part
-                for (const part of parts) {
-                  if (part.trim() && !part.includes('--\r\n')) {
+              // Split the body by boundary
+              const parts = rawBody.split(`--${boundary}`);
+              console.log(`Found ${parts.length} parts in the multipart data`);
+              
+              // Process each part with better error handling
+              for (const part of parts) {
+                if (part.trim() && !part.includes('--\r\n')) {
+                  try {
                     // Extract headers and content
-                    const [headerText, content] = part.split('\r\n\r\n');
-                    if (!headerText || !content) continue;
+                    const splitIndex = part.indexOf('\r\n\r\n');
+                    if (splitIndex === -1) {
+                      console.log('Invalid part format, missing header/body separator');
+                      continue;
+                    }
+                    
+                    const headerText = part.substring(0, splitIndex);
+                    const content = part.substring(splitIndex + 4); // +4 for '\r\n\r\n'
+                    
+                    console.log('Part header:', headerText);
+                    console.log('Content length:', content.length);
                     
                     // Parse the Content-Disposition header
                     const nameMatch = headerText.match(/name="([^"]*)"/i);
-                    if (!nameMatch) continue;
+                    if (!nameMatch) {
+                      console.log('No name found in part');
+                      continue;
+                    }
                     
                     const name = nameMatch[1];
+                    console.log(`Processing part with name: ${name}`);
                     
                     // Check if this is a file field
                     const filenameMatch = headerText.match(/filename="([^"]*)"/i);
@@ -198,6 +206,7 @@ export const handleUpload = (type) => {
                     if (filenameMatch) {
                       // This is a file field
                       const filename = filenameMatch[1];
+                      console.log(`Found file: ${filename} for field ${name}`);
                       
                       // Extract content type
                       const contentTypeMatch = headerText.match(/Content-Type:\s*([^\r\n]*)/i);
@@ -208,77 +217,43 @@ export const handleUpload = (type) => {
                         const fileData = JSON.parse(content.trim());
                         if (fileData && fileData.uri) {
                           // This is a React Native file object
+                          console.log(`Found React Native file object with URI: ${fileData.uri}`);
                           customFormData.set(name, {
                             uri: fileData.uri,
                             name: fileData.name || filename,
                             type: fileData.type || fileType
                           });
-                          
-                          // Also add to body for convenience
-                          body[name] = fileData;
                         }
                       } catch (e) {
-                        // Not JSON, treat as regular file content
-                        // (This would require more complex binary parsing for actual file data)
-                        console.log(`Field ${name} appears to be a file but couldn't parse content`);
+                        console.log(`Error parsing file content as JSON: ${e.message}`);
+                        // Not JSON, log more details about the content
+                        console.log(`Content starts with: ${content.substring(0, 50)}...`);
                       }
                     } else {
                       // This is a regular field
                       const fieldValue = content.trim();
+                      console.log(`Setting regular field ${name} with value length: ${fieldValue.length}`);
                       customFormData.set(name, fieldValue);
-                      
-                      // Try to parse as JSON if it looks like JSON
-                      if ((fieldValue.startsWith('{') && fieldValue.endsWith('}')) || 
-                          (fieldValue.startsWith('[') && fieldValue.endsWith(']'))) {
-                        try {
-                          body[name] = JSON.parse(fieldValue);
-                        } catch (e) {
-                          body[name] = fieldValue;
-                        }
-                      } else {
-                        body[name] = fieldValue;
-                      }
                     }
+                  } catch (partError) {
+                    console.error(`Error processing part: ${partError.message}`);
                   }
                 }
-                
-                // Add entries and keys methods to mimic FormData
-                // Replace lines 238-243 with this:
-                customFormData.entries = function() {
-                  return this._map.entries();
-                };
-                
-                customFormData.get = function(key) {
-                  return this._map.get(key);
-                };
-                
-                // Use our custom FormData object
-                formData = customFormData;
-                c.set('body', body);
-                
-                // Process uploads
-                const uploads = {};
-                const fileUploads = [];
-                
-                // Process file fields
-                for (const [key, value] of formData.entries()) {
-                  if (value && typeof value === 'object' && value.uri) {
-                    // This is a React Native file object
-                    uploads[key] = value.uri;
-                    console.log(`Setting direct URI for ${key}: ${value.uri}`);
-                  }
-                }
-                
-                // Set uploads in context
-                c.set('uploads', uploads);
-                c.set('fileUploads', fileUploads);
-                
-                // Continue to next middleware
-                return await next();
               }
+              
+              // Log the keys found in the custom FormData
+              console.log('FormData keys:', Array.from(customFormData.keys()));
+              
+              // Use our custom FormData object
+              formData = customFormData;
+            } else {
+              console.error('No boundary found in Content-Type header:', contentType);
             }
-          } catch (textError) {
-            console.error('Failed to read request body as text:', textError);
+            
+            // Use our custom FormData object
+            formData = customFormData;
+          } catch (parseError) {
+            console.error('Failed to parse React Native request:', parseError);
           }
         }
         
