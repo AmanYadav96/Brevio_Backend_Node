@@ -135,8 +135,24 @@ export const handleUpload = (type) => {
             const rawBody = await c.req.text();
             
             // Create a custom FormData-like object
-            const customFormData = new Map();
-            const body = {};
+            const customFormData = {
+              _map: new Map(),
+              set: function(key, value) {
+                this._map.set(key, value);
+              },
+              get: function(key) {
+                return this._map.get(key);
+              },
+              has: function(key) {
+                return this._map.has(key);
+              },
+              entries: function() {
+                return this._map.entries();
+              },
+              keys: function() {
+                return this._map.keys();
+              }
+            };
             
             // Try to parse the body as JSON first (as a fallback)
             try {
