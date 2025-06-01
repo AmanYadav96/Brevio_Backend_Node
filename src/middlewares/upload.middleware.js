@@ -6,6 +6,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getVideoDurationInSeconds } from 'get-video-duration'
 import formidable from 'formidable'
 import FileUpload from '../models/fileUpload.model.js'
+import socketService from '../services/socket.service.js';
 
 // File type and size constraints
 const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp']
@@ -114,60 +115,45 @@ export const uploadTypes = {
  * @param {string} type - The type of upload (from uploadTypes)
  * @returns {Function} Middleware function
  */
+// Modified handleUpload middleware
 export const handleUpload = (type) => {
   return async (c, next) => {
     try {
-      // Initialize context variables
-      const uploads = {}
-      const fileUploads = []
-      const body = {}
-      const userId = c.get('user')?._id
+      // Get user from context
+      const user = c.get('user');
+      const userId = user._id;
       
       // Get upload configuration
-      const uploadConfig = uploadTypes[type] || {
-        folder: 'misc',
-        fields: []
-      }
+      const uploadConfig = uploadTypes[type] || uploadTypes.DEFAULT;
       
-      console.log(`Using upload type: ${type}, folder: ${uploadConfig.folder}`);
+      // Initialize uploads object
+      const uploads = {};
+      const body = {};
+      const fileUploads = [];
       
-      // Configure formidable
+      // Create form parser
       const form = formidable({
         multiples: true,
-        maxFileSize: maxFileSize.video, // Set to largest possible size
-        filter: (part) => {
-          // Return true to accept the file, false to reject
-          if (!part.originalFilename || !part.mimetype) return false;
-          
-          // Check file type based on field name
-          const field = part.name;
-          if ((field === 'videoFile' || field === 'trailer') && 
-              !allowedVideoTypes.includes(part.mimetype)) {
-            return false;
-          }
-          
-          if ((field.includes('thumbnail') || field.includes('Banner') || field.includes('logo')) && 
-              !allowedImageTypes.includes(part.mimetype)) {
-            return false;
-          }
-          
-          return true;
-        }
+        maxFileSize: uploadConfig.maxFileSize || maxFileSize.default,
+        uploadDir: tempDir,
+        keepExtensions: true,
+        filename: (name, ext) => `${Date.now()}-${name}${ext}`
       });
       
-      // Parse the form data
+      // Process the form data
       await new Promise((resolve, reject) => {
+        // Use createReadStream instead of req.on
         form.parse(c.req.raw, async (err, fields, files) => {
           if (err) {
-            console.error('FormData parsing error:', err);
+            console.error('Form parsing error:', err);
             reject(err);
             return;
           }
           
-          // Process form fields
+          // Process fields
           for (const [key, value] of Object.entries(fields)) {
             try {
-              // Try to parse as JSON if it looks like JSON
+              // Try to parse as JSON if possible
               if (typeof value === 'string' && 
                   ((value.startsWith('{') && value.endsWith('}')) || 
                   (value.startsWith('[') && value.endsWith(']')))) {
@@ -185,17 +171,15 @@ export const handleUpload = (type) => {
           }
           
           // Process files
-          for (const [fieldName, fileInfo] of Object.entries(files)) {
-            if (!uploadConfig.fields.includes(fieldName)) continue;
-            
-            const fileArray = Array.isArray(fileInfo) ? fileInfo : [fileInfo];
+          for (const fieldName in files) {
+            const fileArray = Array.isArray(files[fieldName]) ? files[fieldName] : [files[fieldName]];
             
             for (const file of fileArray) {
               try {
-                // Create file upload tracking record
-                let fileUpload = null;
+                // Create file upload record
+                let fileUpload;
                 if (userId) {
-                  fileUpload = new FileUpload({
+                  fileUpload = await FileUpload.create({
                     userId,
                     fileName: file.originalFilename,
                     fileSize: file.size,
@@ -211,6 +195,9 @@ export const handleUpload = (type) => {
                   
                   await fileUpload.save();
                   fileUploads.push(fileUpload);
+                  
+                  // Emit initial progress via socket
+                  socketService.emitUploadProgress(userId, fileUpload._id, 0);
                 }
                 
                 // Read file content
@@ -237,6 +224,14 @@ export const handleUpload = (type) => {
                   }
                 });
                 
+                // Update progress to 50% - file read complete, starting upload
+                if (fileUpload) {
+                  await FileUpload.findByIdAndUpdate(fileUpload._id, {
+                    progress: 50
+                  });
+                  socketService.emitUploadProgress(userId, fileUpload._id, 50);
+                }
+                
                 await s3Client.send(command);
                 
                 // Set URL in uploads object
@@ -249,6 +244,9 @@ export const handleUpload = (type) => {
                     url: uploads[fieldName],
                     progress: 100
                   });
+                  
+                  // Emit completion via socket
+                  socketService.emitUploadComplete(userId, fileUpload._id, uploads[fieldName]);
                 }
                 
                 // Calculate video duration for video files
@@ -280,6 +278,9 @@ export const handleUpload = (type) => {
                     status: 'failed',
                     error: error.message
                   });
+                  
+                  // Emit error via socket
+                  socketService.emitUploadError(userId, fileUpload._id, error.message);
                 }
                 
                 reject(error);

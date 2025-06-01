@@ -3,7 +3,9 @@ import { protect, restrictTo } from "../middlewares/auth.middleware.js"
 import { UserRole } from "../models/user.model.js"
 import { handleUpload } from "../middlewares/upload.middleware.js"
 import {
-  createContent,
+  createContentBasic,
+  uploadMainVideo,
+  uploadMediaAssets,
   addEpisode,
   addLesson,
   approveContent,
@@ -15,8 +17,12 @@ import {
 
 const router = new Hono()
 
-// Content creation routes
-router.post("/", protect, handleUpload('creatorContent'), createContent)
+// Content creation routes - new workflow
+router.post("/basic", protect, createContentBasic)
+router.post("/:contentId/video", protect, handleUpload('CREATOR_CONTENT'), uploadMainVideo)
+router.post("/:contentId/media", protect, handleUpload('CREATOR_CONTENT'), uploadMediaAssets)
+
+// Existing routes
 router.post("/:contentId/seasons/:seasonId/episodes", protect, handleUpload('episode'), addEpisode)
 router.post("/:contentId/lessons", protect, handleUpload('lesson'), addLesson)
 

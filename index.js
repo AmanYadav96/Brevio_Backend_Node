@@ -26,13 +26,11 @@ import creatorContentRoutes from "./src/routes/creatorContent.routes.js"
 import channelSubscriptionRoutes from "./src/routes/channelSubscription.routes.js"
 import sliderRoutes from "./src/routes/slider.routes.js"
 import categoryRoutes from "./src/routes/category.routes.js"
-// ... existing imports ...
 import adminRouter from './src/routes/admin.routes.js';
 
-// ... existing code ...
-
-
-
+// Add these imports at the top
+import http from 'http';
+import socketService from './src/services/socket.service.js';
 
 const app = new Hono()
 
@@ -146,12 +144,45 @@ app.get('/api-docs/debug', (c) => {
 // For local development
 if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 5000
-  serve({
-    fetch: app.fetch,
-    port: PORT
-  }, () => {
-    console.log(`Server is running on http://localhost:${PORT}`)
-  })
+  
+  // Create HTTP server instead of using serve directly
+  const server = http.createServer((req, res) => {
+    // Create a full URL from the path
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`).toString();
+    
+    // Only include body for methods that support it
+    const requestOptions = {
+      method: req.method,
+      headers: req.headers
+    };
+    
+    // Add body only for methods that support it (not GET or HEAD)
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      requestOptions.body = req;
+    }
+    
+    app.fetch(new Request(url, requestOptions)).then(response => {
+      res.statusCode = response.status;
+      
+      // Set headers
+      for (const [key, value] of response.headers.entries()) {
+        res.setHeader(key, value);
+      }
+      
+      // Send response
+      response.arrayBuffer().then(buffer => {
+        res.end(Buffer.from(buffer));
+      });
+    });
+  });
+  
+  // Initialize Socket.io with the HTTP server
+  socketService.initialize(server);
+  
+  // Start the server
+  server.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+  });
 }
 
 // Export a serverless function handler for Vercel

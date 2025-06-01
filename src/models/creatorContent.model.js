@@ -104,7 +104,8 @@ const seasonSchema = new mongoose.Schema({
 const mediaAssetsSchema = new mongoose.Schema({
   thumbnail: {
     type: String,
-    required: [true, "Thumbnail is required"]
+    // Removing the required validation
+    // required: [true, "Thumbnail is required"]
   },
   verticalBanner: {
     type: String
@@ -175,14 +176,15 @@ const creatorContentSchema = new mongoose.Schema({
   },
   videoUrl: {
     type: String,
-    validate: {
-      validator: function(v) {
-        // Only required for short films
-        return this.contentType !== ContentType.SHORT_FILM || (v && v.length > 0);
-      },
-      message: "Video URL is required for short films"
-    }
-  },
+    // Removing the validation that makes it required for short films
+    // validate: {
+    //   validator: function(v) {
+    //     // Only required for short films
+    //     return this.contentType !== ContentType.SHORT_FILM || (v && v.length > 0);
+    //   },
+    //   message: "Video URL is required for short films"
+    // }
+    },
   duration: {
     type: Number,
     min: 0
@@ -236,8 +238,8 @@ const creatorContentSchema = new mongoose.Schema({
 
 // Add validation for content type specific fields
 creatorContentSchema.pre('validate', function(next) {
-  // For SHORT_FILM, videoUrl and duration are required
-  if (this.contentType === ContentType.SHORT_FILM) {
+  // For SHORT_FILM, videoUrl and duration are required only if status is not 'draft'
+  if (this.contentType === ContentType.SHORT_FILM && this.status !== 'draft') {
     if (!this.videoUrl) {
       this.invalidate('videoUrl', 'Video URL is required for short films')
     }

@@ -25,6 +25,7 @@
     "mongoose": "latest",
     "my-v0-project": "file:",
     "nodemon": "^3.1.9",
+    "socket.io": "^4.8.1",
     "stripe": "latest",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",

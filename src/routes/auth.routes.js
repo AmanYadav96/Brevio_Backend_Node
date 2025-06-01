@@ -2,7 +2,7 @@ import { Hono } from "hono"
 import { 
   register, 
   login, 
-  googleAuth, 
+  googleLogin, 
   facebookAuth, 
   appleAuth,
   becomeCreator 
@@ -16,7 +16,7 @@ router.post("/register", register)
 router.post("/login", login)
 
 // Social authentication
-router.post("/google", googleAuth)
+router.post("/google", googleLogin)
 router.post("/facebook", facebookAuth)
 router.post("/apple", appleAuth)
 

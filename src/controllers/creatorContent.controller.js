@@ -671,3 +671,240 @@ export const purchaseEducationalContent = async (c) => {
     }, 500)
   }
 }
+
+// Add these new functions to your existing controller file
+
+// Step 1: Create basic content with metadata only
+export const createContentBasic = async (c) => {
+  try {
+    const user = c.get('user')
+    
+    // Parse request body
+    const body = await c.req.json()
+    
+    // Ensure we have valid data
+    if (!body || Object.keys(body).length === 0) {
+      return c.json({
+        success: false,
+        message: 'No content data provided'
+      }, 400)
+    }
+    
+    console.log('Basic content data being processed:', JSON.stringify(body, null, 2))
+    
+    // Check if user is creator or admin
+    if (user.role !== UserRole.CREATOR && user.role !== UserRole.ADMIN) {
+      return c.json({ 
+        success: false, 
+        message: "Only creators and admins can upload content" 
+      }, 403)
+    }
+    
+    // Create content with appropriate fields based on content type
+    const contentData = {
+      ...body,
+      creator: user._id,
+      status: 'draft', // Start as draft until video is uploaded
+      adminApproved: false
+    }
+    
+    // Initialize empty media assets
+    contentData.mediaAssets = {
+      thumbnail: '',
+      verticalBanner: '',
+      horizontalBanner: '',
+      trailer: '',
+      trailerDuration: 0
+    }
+    
+    const content = await CreatorContent.create(contentData)
+    
+    return c.json({ 
+      success: true, 
+      content,
+      message: "Content draft created successfully. Please upload video and media assets."
+    }, 201)
+  } catch (error) {
+    console.error("Create basic content error:", error)
+    return c.json({ 
+      success: false, 
+      message: error.message 
+    }, 500)
+  }
+}
+
+// Step 2: Upload main video
+export const uploadMainVideo = async (c) => {
+  try {
+    const user = c.get('user')
+    const uploads = c.get('uploads') || {}
+    const fileUploads = c.get('fileUploads') || []
+    const { contentId } = c.req.param()
+    
+    // Find content and verify ownership
+    const content = await CreatorContent.findById(contentId)
+    
+    if (!content) {
+      return c.json({ 
+        success: false, 
+        message: "Content not found" 
+      }, 404)
+    }
+    
+    // Check if user is creator or admin
+    if (!content.creator.equals(user._id) && user.role !== UserRole.ADMIN) {
+      return c.json({ 
+        success: false, 
+        message: "You don't have permission to modify this content" 
+      }, 403)
+    }
+    
+    // Ensure we have a video file
+    if (!uploads.videoFile) {
+      return c.json({
+        success: false,
+        message: "No video file provided"
+      }, 400)
+    }
+    
+    // Process video metadata for orientation validation
+    let videoMetadata = {}
+    if (content.contentType === ContentType.SHORT_FILM && uploads.videoFile) {
+      videoMetadata = await videoProcessorService.detectOrientation(uploads.videoFile)
+      
+      // Validate orientation
+      try {
+        videoProcessorService.validateOrientation(videoMetadata, content.orientation)
+      } catch (error) {
+        return c.json({ 
+          success: false, 
+          message: error.message 
+        }, 400)
+      }
+    }
+    
+    // Update content with video URL and metadata
+    content.videoUrl = uploads.videoFile
+    content.duration = videoMetadata.duration || content.duration
+    content.videoMetadata = videoMetadata
+    
+    // Update status if all required fields are present
+    if (content.title && content.description && content.videoUrl) {
+      content.status = user.role === UserRole.ADMIN ? 'published' : 'processing'
+    }
+    
+    await content.save()
+    
+    return c.json({ 
+      success: true, 
+      content,
+      fileUploads,
+      message: "Video uploaded successfully"
+    })
+  } catch (error) {
+    console.error("Upload main video error:", error)
+    return c.json({ 
+      success: false, 
+      message: error.message 
+    }, 500)
+  }
+}
+
+// Step 3: Upload media assets
+export const uploadMediaAssets = async (c) => {
+  try {
+    const user = c.get('user')
+    const uploads = c.get('uploads') || {}
+    const fileUploads = c.get('fileUploads') || []
+    const { contentId } = c.req.param()
+    
+    // Find content and verify ownership
+    const content = await CreatorContent.findById(contentId)
+    
+    if (!content) {
+      return c.json({ 
+        success: false, 
+        message: "Content not found" 
+      }, 404)
+    }
+    
+    // Check if user is creator or admin
+    if (!content.creator.equals(user._id) && user.role !== UserRole.ADMIN) {
+      return c.json({ 
+        success: false, 
+        message: "You don't have permission to modify this content" 
+      }, 403)
+    }
+    
+    // Update media assets
+    content.mediaAssets = {
+      thumbnail: uploads.thumbnail || content.mediaAssets?.thumbnail || '',
+      verticalBanner: uploads.verticalBanner || content.mediaAssets?.verticalBanner || '',
+      horizontalBanner: uploads.horizontalBanner || content.mediaAssets?.horizontalBanner || '',
+      trailer: uploads.trailer || content.mediaAssets?.trailer || '',
+      trailerDuration: uploads.trailerDuration || content.mediaAssets?.trailerDuration || 0
+    }
+    
+    // Update status if this completes the content
+    if (content.status === 'draft' && content.videoUrl) {
+      content.status = user.role === UserRole.ADMIN ? 'published' : 'processing'
+    }
+    
+    await content.save()
+    
+    // Send email notification if content is complete
+    if (content.status === 'processing' || content.status === 'published') {
+      try {
+        const { default: emailService } = await import('../services/email.service.js');
+        
+        // Send email to creator
+        await emailService.sendContentUploadedEmail({
+          to: user.email,
+          userName: user.name,
+          contentTitle: content.title,
+          contentType: content.contentType,
+          contentId: content._id,
+          isAutoApproved: user.role === UserRole.ADMIN
+        });
+        
+        // If creator is not admin, send notification to admins
+        if (user.role !== UserRole.ADMIN) {
+          // Find admin emails
+          const admins = await User.find({ role: UserRole.ADMIN }).select('email name');
+          
+          if (admins.length > 0) {
+            // Send notification to each admin
+            for (const admin of admins) {
+              await emailService.sendContentReviewNotificationEmail({
+                to: admin.email,
+                adminName: admin.name,
+                creatorName: user.name,
+                contentTitle: content.title,
+                contentType: content.contentType,
+                contentId: content._id
+              });
+            }
+          }
+        }
+        
+        console.log(`Content upload email sent to ${user.email}`);
+      } catch (emailError) {
+        // Log error but don't fail the request
+        console.error("Error sending content upload email:", emailError);
+      }
+    }
+    
+    return c.json({ 
+      success: true, 
+      content,
+      fileUploads,
+      message: "Media assets uploaded successfully"
+    })
+  } catch (error) {
+    console.error("Upload media assets error:", error)
+    return c.json({ 
+      success: false, 
+      message: error.message 
+    }, 500)
+  }
+}

@@ -646,3 +646,122 @@
  *       404:
  *         description: Content not found
  */
+/**
+ * @swagger
+ * /api/creator-content/basic:
+ *   post:
+ *     summary: Create basic content with metadata only
+ *     tags: [Creator Content]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - description
+ *               - contentType
+ *               - orientation
+ *             properties:
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               contentType:
+ *                 type: string
+ *                 enum: [shortFilm, series, educational]
+ *               orientation:
+ *                 type: string
+ *                 enum: [horizontal, vertical]
+ *               genre:
+ *                 type: string
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               ageRating:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Content draft created successfully
+ *       400:
+ *         description: Invalid input data
+ *       403:
+ *         description: Not authorized
+ *
+ * /api/creator-content/{contentId}/video:
+ *   post:
+ *     summary: Upload main video for content
+ *     tags: [Creator Content]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               videoFile:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Video uploaded successfully
+ *       400:
+ *         description: Invalid input data
+ *       403:
+ *         description: Not authorized
+ *       404:
+ *         description: Content not found
+ *
+ * /api/creator-content/{contentId}/media:
+ *   post:
+ *     summary: Upload media assets for content
+ *     tags: [Creator Content]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               thumbnail:
+ *                 type: string
+ *                 format: binary
+ *               verticalBanner:
+ *                 type: string
+ *                 format: binary
+ *               horizontalBanner:
+ *                 type: string
+ *                 format: binary
+ *               trailer:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Media assets uploaded successfully
+ *       400:
+ *         description: Invalid input data
+ *       403:
+ *         description: Not authorized
+ *       404:
+ *         description: Content not found
+ */
