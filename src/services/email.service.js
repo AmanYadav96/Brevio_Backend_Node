@@ -8,8 +8,8 @@ class EmailService {
       port: process.env.EMAIL_PORT || 587,
       secure: process.env.EMAIL_SECURE === 'true',
       auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD
+        user: process.env.EMAIL_USER || "info@brevio.online",
+        pass: process.env.EMAIL_PASSWORD || "zneu phvd wpdq tzhm"
       }
     });
   }
@@ -403,6 +403,119 @@ class EmailService {
       return info;
     } catch (error) {
       console.error('Error sending account deleted email:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send OTP verification email
+   * @param {Object} options Email options
+   * @returns {Promise<Object>} Email send result
+   */
+  async sendOtpVerificationEmail(options) {
+    try {
+      const { to, name, otp } = options;
+      
+      // Get current year for footer
+      const currentYear = new Date().getFullYear();
+      
+      // Send mail with defined transport object
+      const info = await this.transporter.sendMail({
+        from: `"Brevio Team" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
+        to,
+        subject: 'Código de verificación OTP',
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>OTP Verification</title>
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 0;
+                background: linear-gradient(#1D1B1C, #282828, #D6EF31);
+              }
+
+              .container {
+                max-width: 600px;
+                margin: 20px auto;
+                background-color: #1D1B1C;
+                border-radius: 8px;
+                overflow: hidden;
+                color: white;
+              }
+
+              .header {
+                background-color: #4C2BEE;
+                color: white;
+                padding: 20px;
+                text-align: center;
+              }
+
+              .logo {
+                display: block;
+                margin: 0 auto 10px;
+                max-width: 160px;
+                height: 40px;
+              }
+
+              .content {
+                padding: 20px;
+                background-color: #282828;
+              }
+
+              .otp-code {
+                font-size: 28px;
+                font-weight: bold;
+                color: #D6EF31;
+                text-align: center;
+                margin: 20px 0;
+              }
+
+              .footer {
+                text-align: center;
+                padding: 15px;
+                background-color: #1D1B1C;
+                font-size: 13px;
+                color: #CCCCCC;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <img src="cid:brevialogo" alt="Brevio Logo" class="logo" />
+                <h2>OTP Verification</h2>
+              </div>
+              <div class="content">
+                <p>Hola, ${name}</p>
+                <p>Aquí tienes tu código para entrar en Brevio:</p>
+                <div class="otp-code">${otp}</div>
+                <p>Este código es de un solo uso y caduca en unos minutos, así que date prisa.</p>
+                <p>Si no pediste este código, ignora este mensaje o contáctanos.</p>
+              </div>
+              <div class="footer">
+                <p>This email was sent by Brevio</p>
+                <p>&copy;${currentYear} Brevio. All rights reserved.</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `,
+        attachments: [
+          {
+            filename: 'brevio-logo.png',
+            path: process.env.LOGO_PATH || 'https://brevio.online/logo.png',
+            cid: 'brevialogo'
+          }
+        ]
+      });
+      
+      console.log('OTP verification email sent:', info.messageId);
+      return info;
+    } catch (error) {
+      console.error('Error sending OTP verification email:', error);
       throw error;
     }
   }
