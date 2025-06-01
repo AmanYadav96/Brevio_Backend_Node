@@ -159,6 +159,7 @@ if (process.env.NODE_ENV !== 'production') {
     // Add body only for methods that support it (not GET or HEAD)
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       requestOptions.body = req;
+      requestOptions.duplex = 'half'; // Add this line to specify the duplex option
     }
     
     app.fetch(new Request(url, requestOptions)).then(response => {

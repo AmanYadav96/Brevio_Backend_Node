@@ -37,4 +37,7 @@ router.get("/", protect, getAllContent)
 // Purchase route
 router.post("/:contentId/purchase", protect, purchaseEducationalContent)
 
+// Direct upload routes
+
+
 export default router

@@ -736,8 +736,15 @@ export const createContentBasic = async (c) => {
 // Step 2: Upload main video
 export const uploadMainVideo = async (c) => {
   try {
+    const uploads = c.get('uploads') || {}  // Move this line up before using 'uploads'
+    const body = c.get('body');
+    
+    console.log('Uploads object:', uploads);
+    console.log('Body object:', body);
+    console.log('Request headers:', c.req.header());
+    
     const user = c.get('user')
-    const uploads = c.get('uploads') || {}
+    // Remove duplicate declaration
     const fileUploads = c.get('fileUploads') || []
     const { contentId } = c.req.param()
     

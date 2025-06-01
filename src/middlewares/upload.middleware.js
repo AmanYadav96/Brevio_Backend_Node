@@ -115,106 +115,83 @@ export const uploadTypes = {
  * @param {string} type - The type of upload (from uploadTypes)
  * @returns {Function} Middleware function
  */
-// Modified handleUpload middleware
+
+
 export const handleUpload = (type) => {
   return async (c, next) => {
     try {
+      console.log('Content-Type:', c.req.header('Content-Type'));
+      
       // Get user from context
       const user = c.get('user');
-      const userId = user._id;
       
       // Get upload configuration
       const uploadConfig = uploadTypes[type] || uploadTypes.DEFAULT;
+      console.log('Upload config:', uploadConfig);
       
       // Initialize uploads object
       const uploads = {};
       const body = {};
-      const fileUploads = [];
       
-      // Create form parser
-      const form = formidable({
-        multiples: true,
-        maxFileSize: uploadConfig.maxFileSize || maxFileSize.default,
-        uploadDir: tempDir,
-        keepExtensions: true,
-        filename: (name, ext) => `${Date.now()}-${name}${ext}`
-      });
-      
-      // Process the form data
-      await new Promise((resolve, reject) => {
-        // Use createReadStream instead of req.on
-        form.parse(c.req.raw, async (err, fields, files) => {
-          if (err) {
-            console.error('Form parsing error:', err);
-            reject(err);
-            return;
-          }
+      try {
+        // Process the form data using Hono's built-in multipart handling
+        console.log('Attempting to parse form data...');
+        const formData = await c.req.parseBody();
+        console.log('Form data keys:', Object.keys(formData));
+        
+        // Process fields
+        for (const [key, value] of Object.entries(formData)) {
+          console.log(`Processing field: ${key}, type:`, typeof value, value instanceof File ? 'File' : 'Not File');
           
-          // Process fields
-          for (const [key, value] of Object.entries(fields)) {
-            try {
-              // Try to parse as JSON if possible
-              if (typeof value === 'string' && 
-                  ((value.startsWith('{') && value.endsWith('}')) || 
-                  (value.startsWith('[') && value.endsWith(']')))) {
-                try {
-                  body[key] = JSON.parse(value);
-                } catch (jsonError) {
-                  body[key] = value;
-                }
-              } else {
-                body[key] = value;
-              }
-            } catch (e) {
-              body[key] = value;
-            }
-          }
-          
-          // Process files
-          for (const fieldName in files) {
-            const fileArray = Array.isArray(files[fieldName]) ? files[fieldName] : [files[fieldName]];
+          if (value instanceof File) {
+            console.log(`File details for ${key}:`, {
+              name: value.name,
+              size: value.size,
+              type: value.type
+            });
             
-            for (const file of fileArray) {
+            // Handle file uploads
+            if (uploadConfig.fields.includes(key) || (key === 'video' && uploadConfig.fields.includes('videoFile'))) {
+              // Validate file type for videos
+              const isVideo = key === 'video' || key === 'videoFile' || key === 'trailer';
+              
+              if (isVideo && !allowedVideoTypes.includes(value.type)) {
+                return c.json({
+                  success: false,
+                  message: `Invalid video format. Allowed types: ${allowedVideoTypes.join(', ')}`
+                }, 400);
+              }
+              
+              // Validate file type for images
+              if (['thumbnail', 'logo', 'banner', 'verticalBanner', 'horizontalBanner'].includes(key) && 
+                  !allowedImageTypes.includes(value.type)) {
+                return c.json({
+                  success: false,
+                  message: `Invalid image format for ${key}. Allowed types: ${allowedImageTypes.join(', ')}`
+                }, 400);
+              }
+              
+              // Validate file size
+              const maxSize = isVideo ? maxFileSize.video : maxFileSize.image;
+              
+              if (value.size > maxSize) {
+                const maxSizeMB = maxSize / (1024 * 1024);
+                return c.json({
+                  success: false,
+                  message: `File too large for ${key}. Maximum size: ${maxSizeMB}MB`
+                }, 400);
+              }
+              
               try {
-                // Create file upload record
-                let fileUpload;
-                if (userId) {
-                  fileUpload = await FileUpload.create({
-                    userId,
-                    fileName: file.originalFilename,
-                    fileSize: file.size,
-                    fileType: file.mimetype,
-                    status: 'uploading',
-                    field: fieldName,
-                    modelType: type === 'CHANNEL' ? 'Channel' : 
-                              type === 'VIDEO' ? 'Video' : 
-                              type === 'ADVERTISEMENT' ? 'Advertisement' : 
-                              type === 'CONTENT' || type === 'CREATOR_CONTENT' ? 'Content' : 'Other',
-                    uploadPath: `${uploadConfig.folder}/${fieldName}`
-                  });
-                  
-                  await fileUpload.save();
-                  fileUploads.push(fileUpload);
-                  
-                  // Emit initial progress via socket
-                  socketService.emitUploadProgress(userId, fileUpload._id, 0);
-                }
+                // Create a unique filename
+                const fileExtension = path.extname(value.name);
+                const fileName = `${uploadConfig.folder}/${uuidv4()}${fileExtension}`;
                 
-                // Read file content
-                const fileBuffer = fs.readFileSync(file.filepath);
+                // Get the file buffer
+                const arrayBuffer = await value.arrayBuffer();
+                const buffer = Buffer.from(arrayBuffer);
                 
-                // Generate unique filename
-                const fileExt = path.extname(file.originalFilename);
-                const fileName = `${uploadConfig.folder}/${fieldName}/${uuidv4()}${fileExt}`;
-                
-                // Upload to R2
-                const command = new PutObjectCommand({
-                  Bucket: process.env.R2_BUCKET_NAME,
-                  Key: fileName,
-                  Body: fileBuffer,
-                  ContentType: file.mimetype
-                });
-                
+                // Set up S3 client for R2
                 const s3Client = new S3Client({
                   region: 'auto',
                   endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -224,107 +201,61 @@ export const handleUpload = (type) => {
                   }
                 });
                 
-                // Update progress to 50% - file read complete, starting upload
-                if (fileUpload) {
-                  await FileUpload.findByIdAndUpdate(fileUpload._id, {
-                    progress: 50
-                  });
-                  socketService.emitUploadProgress(userId, fileUpload._id, 50);
-                }
+                // Create upload command
+                const command = new PutObjectCommand({
+                  Bucket: process.env.R2_BUCKET_NAME,
+                  Key: fileName,
+                  Body: buffer,
+                  ContentType: value.type
+                });
                 
+                // Upload to R2
                 await s3Client.send(command);
                 
-                // Set URL in uploads object
-                uploads[fieldName] = `${R2_PUBLIC_URL}/${fileName}`;
-                
-                // Update file upload status
-                if (fileUpload) {
-                  await FileUpload.findByIdAndUpdate(fileUpload._id, {
-                    status: 'completed',
-                    url: uploads[fieldName],
-                    progress: 100
-                  });
-                  
-                  // Emit completion via socket
-                  socketService.emitUploadComplete(userId, fileUpload._id, uploads[fieldName]);
+                // Set the URL in uploads object with proper field name mapping
+                if (key === 'video') {
+                  // Map 'video' field to 'videoFile' in uploads object
+                  uploads['videoFile'] = `${R2_PUBLIC_URL}/${fileName}`;
+                  console.log('Set videoFile URL:', uploads['videoFile']);
+                } else {
+                  uploads[key] = `${R2_PUBLIC_URL}/${fileName}`;
+                  console.log(`Set ${key} URL:`, uploads[key]);
                 }
                 
-                // Calculate video duration for video files
-                if ((fieldName === 'videoFile' || fieldName === 'trailer') && 
-                    file.mimetype.startsWith('video/')) {
-                  try {
-                    const duration = await getVideoDurationInSeconds(file.filepath);
-                    
-                    // Add duration to body
-                    if (fieldName === 'trailer') {
-                      body.trailerDuration = Math.round(duration);
-                    } else {
-                      body.duration = Math.round(duration);
-                    }
-                  } catch (error) {
-                    console.error('Error calculating video duration:', error);
-                  }
-                }
-                
-                // Clean up temp file
-                fs.unlinkSync(file.filepath);
-                
-              } catch (error) {
-                console.error(`Error processing ${fieldName}:`, error);
-                
-                // Update file upload status on error
-                if (fileUpload) {
-                  await FileUpload.findByIdAndUpdate(fileUpload._id, {
-                    status: 'failed',
-                    error: error.message
-                  });
-                  
-                  // Emit error via socket
-                  socketService.emitUploadError(userId, fileUpload._id, error.message);
-                }
-                
-                reject(error);
-                return;
+              } catch (uploadError) {
+                console.error(`Error uploading ${key}:`, uploadError);
+                return c.json({
+                  success: false,
+                  message: `${key} upload failed: ${uploadError.message}`
+                }, 500);
               }
             }
+          } else {
+            // Handle regular form fields
+            body[key] = value;
           }
-          
-          resolve();
-        });
-      });
-      
-      // Set uploads and body in context
-      c.set('uploads', uploads);
-      c.set('body', body);
-      c.set('fileUploads', fileUploads);
-      
-      // Override c.json to include fileUploads in response
-      const originalJson = c.json;
-      c.json = (data, status) => {
-        try {
-          if (data && data.success !== false && fileUploads.length > 0) {
-            data.fileUploads = fileUploads.map(upload => ({
-              _id: upload._id,
-              field: upload.field,
-              status: upload.status,
-              progress: upload.progress || 0,
-              url: upload.url
-            }));
-          }
-        } catch (error) {
-          console.error('Error adding fileUploads to response:', error);
         }
         
-        return originalJson.call(c, data, status);
-      };
+        console.log('Final uploads object:', uploads);
+        
+      } catch (parseError) {
+        console.error('Error parsing form data:', parseError);
+        return c.json({ 
+          success: false, 
+          message: `Error parsing form data: ${parseError.message}` 
+        }, 400);
+      }
+      
+      // Add uploads and body to context
+      c.set('uploads', uploads);
+      c.set('body', body);
       
       return next();
     } catch (error) {
-      console.error('Upload middleware error:', error);
-      
-      return c.json({
-        success: false,
-        message: 'File upload failed: ' + error.message
+      console.error('Upload error:', error);
+      return c.json({ 
+        success: false, 
+        message: `Upload failed: ${error.message}` 
       }, 500);
     }
   };
