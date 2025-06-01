@@ -179,6 +179,8 @@ export const handleUpload = (type) => {
         }
         
         // Create file upload tracking record
+        // Create file upload tracking record
+        // Create file upload tracking record
         let fileUpload = null;
         if (userId) {
           fileUpload = new FileUpload({
@@ -187,7 +189,13 @@ export const handleUpload = (type) => {
             fileSize: fileData.size,
             fileType: fileData.type,
             status: 'uploading',
-            field
+            field,
+            // Add the missing required fields
+            modelType: type === 'CHANNEL' ? 'Channel' : 
+                       type === 'VIDEO' ? 'Video' : 
+                       type === 'ADVERTISEMENT' ? 'Advertisement' : 
+                       type === 'CONTENT' || type === 'CREATOR_CONTENT' ? 'Content' : 'Other',
+            uploadPath: `${uploadConfig.folder}/${field}`
           });
           
           await fileUpload.save();

@@ -4,10 +4,18 @@ import { AppError } from "../utils/app-error.js"
 export const createChannel = async (c) => {
   try {
     const uploads = c.get('uploads')
-    const body = await c.req.json()
+    const body = c.get('body') // Get the body from context instead of parsing it again
+    const user = c.get('user') // Get the authenticated user
 
     if (uploads.thumbnail) {
       body.thumbnail = uploads.thumbnail
+    }
+
+    // Add the owner information
+    body.owner = {
+      name: body.ownerName || user.name || 'Default Name', // Use provided name or user name
+      email: body.ownerEmail || user.email, // Use provided email or user email
+      stripeAccountId: body.stripeAccountId || 'acct_default' // Use provided stripeAccountId or a default
     }
 
     const channel = await Channel.create(body)
@@ -20,7 +28,7 @@ export const createChannel = async (c) => {
       }, 400)
     }
     console.error("Create channel error:", error)
-    return c.json({ success: false, message: "Failed to create channel" }, 500)
+    return c.json({ success: false, message: "Failed to create channel: " + error.message }, 500)
   }
 }
 
