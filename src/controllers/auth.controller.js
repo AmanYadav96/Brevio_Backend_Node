@@ -142,6 +142,28 @@ export const facebookLogin = async (c) => {
 export const becomeCreator = async (c) => {
   try {
     const userId = c.get("userId")
+    const { username } = await c.req.json()
+
+    // Validate username
+    if (!username) {
+      return c.json({
+        success: false,
+        message: "Username is required to become a creator"
+      }, 400)
+    }
+
+    // Check if username is already taken
+    const existingUsername = await User.findOne({ 
+      username, 
+      _id: { $ne: userId } // Exclude current user
+    })
+    
+    if (existingUsername) {
+      return c.json({
+        success: false,
+        message: "Username is already taken"
+      }, 400)
+    }
 
     // Find user
     const user = await User.findById(userId)
@@ -149,7 +171,8 @@ export const becomeCreator = async (c) => {
       throw new AppError("User not found", 404)
     }
 
-    // Update user role to creator
+    // Update user role to creator and set username
+    user.username = username
     user.role = UserRole.CREATOR
     await user.save()
 
@@ -161,6 +184,7 @@ export const becomeCreator = async (c) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        username: user.username,
         profilePicture: user.profilePicture,
       },
     })
@@ -212,15 +236,53 @@ export const login = async (c) => {
 }
 
 // Google authentication
-export const googleAuth = async (c) => {
+export const googleAuthCreator = async (c) => {
   try {
-    const { idToken } = await c.req.json()
+    const { idToken, username } = await c.req.json()
     
     if (!idToken) {
       return c.json({ success: false, message: "ID token is required" }, 400)
     }
     
-    const { user, token } = await authService.googleAuth(idToken)
+    if (!username) {
+      return c.json({ success: false, message: "Username is required for creators" }, 400)
+    }
+    
+    // Check if username is already taken
+    const existingUser = await User.findOne({ username })
+    if (existingUser) {
+      return c.json({ success: false, message: "Username is already taken" }, 400)
+    }
+    
+    // Use the existing googleAuth but add username
+    const result = await signInWithCredential(auth, GoogleAuthProvider.credential(idToken))
+    const firebaseUser = result.user
+    
+    // Check if user exists
+    let user = await User.findOne({ email: firebaseUser.email })
+    
+    if (user) {
+      // Update existing user
+      user.username = username
+      user.role = UserRole.CREATOR
+      // Other updates as in googleAuth
+      await user.save()
+    } else {
+      // Create new user with username and creator role
+      user = await User.create({
+        email: firebaseUser.email,
+        name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
+        username: username,
+        role: UserRole.CREATOR,
+        profilePicture: firebaseUser.photoURL || "",
+        authProvider: AuthProvider.GOOGLE,
+        isEmailVerified: firebaseUser.emailVerified,
+        firebaseUid: firebaseUser.uid,
+        // Other fields as in googleAuth
+      })
+    }
+    
+    const token = await sign({ id: user._id }, process.env.JWT_SECRET)
     
     return c.json({
       success: true,
@@ -228,10 +290,7 @@ export const googleAuth = async (c) => {
       user
     })
   } catch (error) {
-    console.error("Google auth error:", error)
-    if (error.code === 'auth/invalid-credential') {
-      return c.json({ success: false, message: "Invalid Google token" }, 401)
-    }
+    console.error("Google auth creator error:", error)
     return c.json({
       success: false,
       message: error.message || "Google authentication failed"

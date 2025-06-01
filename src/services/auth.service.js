@@ -105,6 +105,7 @@ export class AuthService {
         user = await User.create({
           email,
           name: name || email.split('@')[0],
+          username: email.split('@')[0] + Math.floor(Math.random() * 1000), // Generate a default username
           profilePicture: picture || "",
           authProvider: AuthProvider.GOOGLE,
           isEmailVerified: firebaseUser.emailVerified,
