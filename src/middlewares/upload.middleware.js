@@ -4,6 +4,7 @@ import os from 'os'
 import { v4 as uuidv4 } from 'uuid'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getVideoDurationInSeconds } from 'get-video-duration'
+import formidable from 'formidable'
 import FileUpload from '../models/fileUpload.model.js'
 
 // File type and size constraints
@@ -130,184 +131,166 @@ export const handleUpload = (type) => {
       
       console.log(`Using upload type: ${type}, folder: ${uploadConfig.folder}`);
       
-      // Parse as FormData
-      let formData;
-      try {
-        formData = await c.req.formData();
-      } catch (error) {
-        console.error('FormData parsing error:', error);
-        return c.json({
-          success: false,
-          message: 'Failed to parse request body as FormData. Make sure you are sending a proper multipart/form-data request.'
-        }, 400);
-      }
-      
-      // Process each file in the form data
-      for (const field of uploadConfig.fields) {
-        const fileData = formData.get(field);
-        if (!fileData || !(fileData instanceof Blob)) continue;
-        
-        // Validate file type
-        if ((field === 'videoFile' || field === 'trailer') && !allowedVideoTypes.includes(fileData.type)) {
-          return c.json({ 
-            success: false, 
-            message: `Invalid video type for ${field}. Allowed types: ${allowedVideoTypes.join(', ')}` 
-          }, 400);
-        }
-        
-        if ((field.includes('thumbnail') || field.includes('Banner') || field.includes('logo')) && 
-            !allowedImageTypes.includes(fileData.type)) {
-          return c.json({ 
-            success: false, 
-            message: `Invalid image type for ${field}. Allowed types: ${allowedImageTypes.join(', ')}` 
-          }, 400);
-        }
-        
-        // Validate file size
-        const maxSize = (field === 'videoFile' || field === 'trailer') ? 
-          maxFileSize.video : maxFileSize.image;
+      // Configure formidable
+      const form = formidable({
+        multiples: true,
+        maxFileSize: maxFileSize.video, // Set to largest possible size
+        filter: (part) => {
+          // Return true to accept the file, false to reject
+          if (!part.originalFilename || !part.mimetype) return false;
           
-        if (fileData.size > maxSize) {
-          return c.json({ 
-            success: false, 
-            message: `File too large for ${field}. Maximum size: ${
-              (field === 'videoFile' || field === 'trailer') ? 
-                (maxSize / (1024 * 1024 * 1024)) + 'GB' : 
-                (maxSize / (1024 * 1024)) + 'MB'
-            }` 
-          }, 400);
-        }
-        
-        // Create file upload tracking record
-        // Create file upload tracking record
-        // Create file upload tracking record
-        let fileUpload = null;
-        if (userId) {
-          fileUpload = new FileUpload({
-            userId,
-            fileName: fileData.name || `${field}.${fileData.type.split('/')[1]}`,
-            fileSize: fileData.size,
-            fileType: fileData.type,
-            status: 'uploading',
-            field,
-            // Add the missing required fields
-            modelType: type === 'CHANNEL' ? 'Channel' : 
-                       type === 'VIDEO' ? 'Video' : 
-                       type === 'ADVERTISEMENT' ? 'Advertisement' : 
-                       type === 'CONTENT' || type === 'CREATOR_CONTENT' ? 'Content' : 'Other',
-            uploadPath: `${uploadConfig.folder}/${field}`
-          });
-          
-          await fileUpload.save();
-          fileUploads.push(fileUpload);
-        }
-        
-        try {
-          // Get file buffer
-          const fileBuffer = Buffer.from(await fileData.arrayBuffer());
-          
-          // Generate unique filename
-          const fileExt = path.extname(fileData.name || `.${fileData.type.split('/')[1]}`);
-          const fileName = `${uploadConfig.folder}/${field}/${uuidv4()}${fileExt}`;
-          
-          // Upload to R2
-          const command = new PutObjectCommand({
-            Bucket: process.env.R2_BUCKET_NAME,
-            Key: fileName,
-            Body: fileBuffer,
-            ContentType: fileData.type
-          });
-          
-          const s3Client = new S3Client({
-            region: 'auto',
-            endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-            credentials: {
-              accessKeyId: process.env.R2_ACCESS_KEY_ID,
-              secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-            }
-          });
-          
-          await s3Client.send(command);
-          
-          // Set URL in uploads object
-          uploads[field] = `${R2_PUBLIC_URL}/${fileName}`;
-          
-          // Update file upload status
-          if (fileUpload) {
-            await FileUpload.findByIdAndUpdate(fileUpload._id, {
-              status: 'completed',
-              url: uploads[field],
-              progress: 100
-            });
+          // Check file type based on field name
+          const field = part.name;
+          if ((field === 'videoFile' || field === 'trailer') && 
+              !allowedVideoTypes.includes(part.mimetype)) {
+            return false;
           }
           
-          // Calculate video duration for video files
-          if ((field === 'videoFile' || field === 'trailer') && fileData.type.startsWith('video/')) {
+          if ((field.includes('thumbnail') || field.includes('Banner') || field.includes('logo')) && 
+              !allowedImageTypes.includes(part.mimetype)) {
+            return false;
+          }
+          
+          return true;
+        }
+      });
+      
+      // Parse the form data
+      await new Promise((resolve, reject) => {
+        form.parse(c.req.raw, async (err, fields, files) => {
+          if (err) {
+            console.error('FormData parsing error:', err);
+            reject(err);
+            return;
+          }
+          
+          // Process form fields
+          for (const [key, value] of Object.entries(fields)) {
             try {
-              // Write to temp file to get duration
-              const tempFilePath = path.join(tempDir, `${uuidv4()}${fileExt}`);
-              fs.writeFileSync(tempFilePath, fileBuffer);
-              
-              const duration = await getVideoDurationInSeconds(tempFilePath);
-              
-              // Clean up temp file
-              fs.unlinkSync(tempFilePath);
-              
-              // Add duration to body
-              if (field === 'trailer') {
-                body.trailerDuration = Math.round(duration);
+              // Try to parse as JSON if it looks like JSON
+              if (typeof value === 'string' && 
+                  ((value.startsWith('{') && value.endsWith('}')) || 
+                  (value.startsWith('[') && value.endsWith(']')))) {
+                try {
+                  body[key] = JSON.parse(value);
+                } catch (jsonError) {
+                  body[key] = value;
+                }
               } else {
-                body.duration = Math.round(duration);
-              }
-            } catch (error) {
-              console.error('Error calculating video duration:', error);
-            }
-          }
-        } catch (error) {
-          console.error(`Error uploading ${field}:`, error);
-          
-          // Update file upload status on error
-          if (fileUpload) {
-            await FileUpload.findByIdAndUpdate(fileUpload._id, {
-              status: 'failed',
-              error: error.message
-            });
-          }
-          
-          return c.json({
-            success: false,
-            message: `Failed to upload ${field}: ${error.message}`
-          }, 500);
-        }
-      }
-      
-      // Process non-file form data
-      for (const [key, value] of formData.entries()) {
-        // Skip files that were already processed
-        if (uploadConfig.fields.includes(key) && value instanceof Blob) {
-          continue;
-        }
-        
-        // Handle regular form fields
-        if (!(value instanceof Blob)) {
-          try {
-            // Try to parse as JSON if it looks like JSON
-            if (typeof value === 'string' && 
-                ((value.startsWith('{') && value.endsWith('}')) || 
-                (value.startsWith('[') && value.endsWith(']')))) {
-              try {
-                body[key] = JSON.parse(value);
-              } catch (jsonError) {
                 body[key] = value;
               }
-            } else {
+            } catch (e) {
               body[key] = value;
             }
-          } catch (e) {
-            body[key] = value;
           }
-        }
-      }
+          
+          // Process files
+          for (const [fieldName, fileInfo] of Object.entries(files)) {
+            if (!uploadConfig.fields.includes(fieldName)) continue;
+            
+            const fileArray = Array.isArray(fileInfo) ? fileInfo : [fileInfo];
+            
+            for (const file of fileArray) {
+              try {
+                // Create file upload tracking record
+                let fileUpload = null;
+                if (userId) {
+                  fileUpload = new FileUpload({
+                    userId,
+                    fileName: file.originalFilename,
+                    fileSize: file.size,
+                    fileType: file.mimetype,
+                    status: 'uploading',
+                    field: fieldName,
+                    modelType: type === 'CHANNEL' ? 'Channel' : 
+                              type === 'VIDEO' ? 'Video' : 
+                              type === 'ADVERTISEMENT' ? 'Advertisement' : 
+                              type === 'CONTENT' || type === 'CREATOR_CONTENT' ? 'Content' : 'Other',
+                    uploadPath: `${uploadConfig.folder}/${fieldName}`
+                  });
+                  
+                  await fileUpload.save();
+                  fileUploads.push(fileUpload);
+                }
+                
+                // Read file content
+                const fileBuffer = fs.readFileSync(file.filepath);
+                
+                // Generate unique filename
+                const fileExt = path.extname(file.originalFilename);
+                const fileName = `${uploadConfig.folder}/${fieldName}/${uuidv4()}${fileExt}`;
+                
+                // Upload to R2
+                const command = new PutObjectCommand({
+                  Bucket: process.env.R2_BUCKET_NAME,
+                  Key: fileName,
+                  Body: fileBuffer,
+                  ContentType: file.mimetype
+                });
+                
+                const s3Client = new S3Client({
+                  region: 'auto',
+                  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+                  credentials: {
+                    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+                    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+                  }
+                });
+                
+                await s3Client.send(command);
+                
+                // Set URL in uploads object
+                uploads[fieldName] = `${R2_PUBLIC_URL}/${fileName}`;
+                
+                // Update file upload status
+                if (fileUpload) {
+                  await FileUpload.findByIdAndUpdate(fileUpload._id, {
+                    status: 'completed',
+                    url: uploads[fieldName],
+                    progress: 100
+                  });
+                }
+                
+                // Calculate video duration for video files
+                if ((fieldName === 'videoFile' || fieldName === 'trailer') && 
+                    file.mimetype.startsWith('video/')) {
+                  try {
+                    const duration = await getVideoDurationInSeconds(file.filepath);
+                    
+                    // Add duration to body
+                    if (fieldName === 'trailer') {
+                      body.trailerDuration = Math.round(duration);
+                    } else {
+                      body.duration = Math.round(duration);
+                    }
+                  } catch (error) {
+                    console.error('Error calculating video duration:', error);
+                  }
+                }
+                
+                // Clean up temp file
+                fs.unlinkSync(file.filepath);
+                
+              } catch (error) {
+                console.error(`Error processing ${fieldName}:`, error);
+                
+                // Update file upload status on error
+                if (fileUpload) {
+                  await FileUpload.findByIdAndUpdate(fileUpload._id, {
+                    status: 'failed',
+                    error: error.message
+                  });
+                }
+                
+                reject(error);
+                return;
+              }
+            }
+          }
+          
+          resolve();
+        });
+      });
       
       // Set uploads and body in context
       c.set('uploads', uploads);
