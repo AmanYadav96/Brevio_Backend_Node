@@ -179,13 +179,14 @@ if (process.env.NODE_ENV !== 'production') {
   
   // Initialize Socket.io with the HTTP server
   socketService.initialize(server);
-  
+ 
   // Start the server
   server.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
-  });
+  })
+  server.timeout = 1000000;
 }
-server.timeout = 1000000
+
 // Export a serverless function handler for Vercel
 export default async function handler(request, response) {
   try {
