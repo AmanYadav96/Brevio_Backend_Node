@@ -120,130 +120,143 @@ export const uploadTypes = {
 export const handleUpload = (type) => {
   return async (c, next) => {
     try {
-      console.log('Content-Type:', c.req.header('Content-Type'));
+      const contentType = c.req.header('Content-Type') || '';
+      console.log('Request path:', c.req.path);
+      console.log('Content-Type:', contentType);
       
       // Get user from context
       const user = c.get('user');
       
-      // Get upload configuration
-      const uploadConfig = uploadTypes[type] || uploadTypes.DEFAULT;
+      // Get upload configuration based on type
+      const uploadConfig = uploadTypes[type];
       console.log('Upload config:', uploadConfig);
       
       // Initialize uploads object
       const uploads = {};
       const body = {};
       
-      try {
-        // Process the form data using Hono's built-in multipart handling
-        console.log('Attempting to parse form data...');
-        const formData = await c.req.parseBody();
-        console.log('Form data keys:', Object.keys(formData));
-        
-        // Process fields
-        for (const [key, value] of Object.entries(formData)) {
-          console.log(`Processing field: ${key}, type:`, typeof value, value instanceof File ? 'File' : 'Not File');
+      // Only process if content type is multipart/form-data
+      if (contentType.includes('multipart/form-data')) {
+        try {
+          // Use Hono's built-in formData method instead of busboy
+          const formData = await c.req.formData();
+          console.log('Form data keys:', Array.from(formData.keys()));
           
-          if (value instanceof File) {
-            console.log(`File details for ${key}:`, {
-              name: value.name,
-              size: value.size,
-              type: value.type
-            });
+          // Process each form field
+          for (const [key, value] of formData.entries()) {
+            console.log(`Processing field: ${key}, type:`, typeof value, value instanceof File ? 'File' : 'Not File');
             
-            // Handle file uploads
-            if (uploadConfig.fields.includes(key) || (key === 'video' && uploadConfig.fields.includes('videoFile'))) {
-              // Validate file type for videos
-              const isVideo = key === 'video' || key === 'videoFile' || key === 'trailer';
+            if (value instanceof File) {
+              console.log(`File details for ${key}:`, {
+                name: value.name,
+                size: value.size,
+                type: value.type
+              });
               
-              if (isVideo && !allowedVideoTypes.includes(value.type)) {
-                return c.json({
-                  success: false,
-                  message: `Invalid video format. Allowed types: ${allowedVideoTypes.join(', ')}`
-                }, 400);
-              }
-              
-              // Validate file type for images
-              if (['thumbnail', 'logo', 'banner', 'verticalBanner', 'horizontalBanner'].includes(key) && 
-                  !allowedImageTypes.includes(value.type)) {
-                return c.json({
-                  success: false,
-                  message: `Invalid image format for ${key}. Allowed types: ${allowedImageTypes.join(', ')}`
-                }, 400);
-              }
-              
-              // Validate file size
-              const maxSize = isVideo ? maxFileSize.video : maxFileSize.image;
-              
-              if (value.size > maxSize) {
-                const maxSizeMB = maxSize / (1024 * 1024);
-                return c.json({
-                  success: false,
-                  message: `File too large for ${key}. Maximum size: ${maxSizeMB}MB`
-                }, 400);
-              }
-              
-              try {
-                // Create a unique filename
-                const fileExtension = path.extname(value.name);
-                const fileName = `${uploadConfig.folder}/${uuidv4()}${fileExtension}`;
+              // Handle file uploads
+              if (uploadConfig.fields.includes(key) || (key === 'video' && uploadConfig.fields.includes('videoFile'))) {
+                // Validate file type for videos
+                const isVideo = key === 'video' || key === 'videoFile' || key === 'trailer';
                 
-                // Get the file buffer
-                const arrayBuffer = await value.arrayBuffer();
-                const buffer = Buffer.from(arrayBuffer);
-                
-                // Set up S3 client for R2
-                const s3Client = new S3Client({
-                  region: 'auto',
-                  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-                  credentials: {
-                    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-                    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-                  }
-                });
-                
-                // Create upload command
-                const command = new PutObjectCommand({
-                  Bucket: process.env.R2_BUCKET_NAME,
-                  Key: fileName,
-                  Body: buffer,
-                  ContentType: value.type
-                });
-                
-                // Upload to R2
-                await s3Client.send(command);
-                
-                // Set the URL in uploads object with proper field name mapping
-                if (key === 'video') {
-                  // Map 'video' field to 'videoFile' in uploads object
-                  uploads['videoFile'] = `${R2_PUBLIC_URL}/${fileName}`;
-                  console.log('Set videoFile URL:', uploads['videoFile']);
-                } else {
-                  uploads[key] = `${R2_PUBLIC_URL}/${fileName}`;
-                  console.log(`Set ${key} URL:`, uploads[key]);
+                if (isVideo && !allowedVideoTypes.includes(value.type)) {
+                  return c.json({
+                    success: false,
+                    message: `Invalid video format. Allowed types: ${allowedVideoTypes.join(', ')}`
+                  }, 400);
                 }
                 
-              } catch (uploadError) {
-                console.error(`Error uploading ${key}:`, uploadError);
-                return c.json({
-                  success: false,
-                  message: `${key} upload failed: ${uploadError.message}`
-                }, 500);
+                // Validate file type for images
+                if (['thumbnail', 'logo', 'banner', 'verticalBanner', 'horizontalBanner'].includes(key) && 
+                    !allowedImageTypes.includes(value.type)) {
+                  return c.json({
+                    success: false,
+                    message: `Invalid image format for ${key}. Allowed types: ${allowedImageTypes.join(', ')}`
+                  }, 400);
+                }
+                
+                // Validate file size
+                const maxSize = isVideo ? maxFileSize.video : maxFileSize.image;
+                
+                if (value.size > maxSize) {
+                  const maxSizeMB = maxSize / (1024 * 1024);
+                  return c.json({
+                    success: false,
+                    message: `File too large for ${key}. Maximum size: ${maxSizeMB}MB`
+                  }, 400);
+                }
+                
+                try {
+                  // Create a unique filename
+                  const fileExtension = path.extname(value.name);
+                  const fileName = `${uploadConfig.folder}/${uuidv4()}${fileExtension}`;
+                  
+                  // Get the file buffer
+                  const arrayBuffer = await value.arrayBuffer();
+                  const buffer = Buffer.from(arrayBuffer);
+                  
+                  // Set up S3 client for R2
+                  const s3Client = new S3Client({
+                    region: 'auto',
+                    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+                    credentials: {
+                      accessKeyId: process.env.R2_ACCESS_KEY_ID,
+                      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+                    }
+                  });
+                  
+                  // Create upload command
+                  const command = new PutObjectCommand({
+                    Bucket: process.env.R2_BUCKET_NAME,
+                    Key: fileName,
+                    Body: buffer,
+                    ContentType: value.type
+                  });
+                  
+                  // Upload to R2
+                  await s3Client.send(command);
+                  
+                  // Set the URL in uploads object with proper field name mapping
+                  if (key === 'video') {
+                    // Map 'video' field to 'videoFile' in uploads object
+                    uploads['videoFile'] = `${R2_PUBLIC_URL}/${fileName}`;
+                    console.log('Set videoFile URL:', uploads['videoFile']);
+                  } else {
+                    uploads[key] = `${R2_PUBLIC_URL}/${fileName}`;
+                    console.log(`Set ${key} URL:`, uploads[key]);
+                  }
+                  
+                } catch (uploadError) {
+                  console.error(`Error uploading ${key}:`, uploadError);
+                  return c.json({
+                    success: false,
+                    message: `${key} upload failed: ${uploadError.message}`
+                  }, 500);
+                }
               }
+            } else {
+              // Handle regular form fields
+              body[key] = value;
             }
-          } else {
-            // Handle regular form fields
-            body[key] = value;
           }
+          
+          console.log('Final uploads object:', uploads);
+          
+        } catch (parseError) {
+          console.error('Error parsing form data:', parseError);
+          return c.json({ 
+            success: false, 
+            message: `Error parsing form data: ${parseError.message}` 
+          }, 400);
         }
-        
-        console.log('Final uploads object:', uploads);
-        
-      } catch (parseError) {
-        console.error('Error parsing form data:', parseError);
-        return c.json({ 
-          success: false, 
-          message: `Error parsing form data: ${parseError.message}` 
-        }, 400);
+      } else {
+        console.log('Not a multipart/form-data request, skipping file processing');
+        // For non-multipart requests, try to parse as JSON
+        try {
+          const jsonBody = await c.req.json();
+          Object.assign(body, jsonBody);
+        } catch (error) {
+          console.log('Not a JSON request either, continuing');
+        }
       }
       
       // Add uploads and body to context
@@ -260,6 +273,9 @@ export const handleUpload = (type) => {
     }
   };
 };
+
+// Add this import at the top of the file with your other imports
+import busboy from 'busboy';
 
 // Export the getMultipleUploadProgress function
 export const getMultipleUploadProgress = async (c) => {
