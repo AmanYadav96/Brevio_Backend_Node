@@ -1,48 +1,78 @@
 import ffmpeg from 'fluent-ffmpeg'
 import { OrientationType } from '../models/contentOrientation.model.js'
+import ffmpegPath from '@ffmpeg-installer/ffmpeg'
+import ffprobePath from '@ffprobe-installer/ffprobe'
+
+// Set FFmpeg paths
+ffmpeg.setFfmpegPath(ffmpegPath.path)
+ffmpeg.setFfprobePath(ffprobePath.path)
 
 export class VideoProcessorService {
   // Detect video orientation based on dimensions
   async detectOrientation(videoPath) {
     return new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(videoPath, (err, metadata) => {
-        if (err) {
-          return reject(err)
-        }
-        
-        try {
-          const videoStream = metadata.streams.find(stream => stream.codec_type === 'video')
-          
-          if (!videoStream) {
-            return reject(new Error('No video stream found'))
+      try {
+        ffmpeg.ffprobe(videoPath, (err, metadata) => {
+          if (err) {
+            console.error('FFprobe error:', err)
+            // Return default values if FFprobe fails
+            return resolve({
+              width: 1920,
+              height: 1080,
+              aspectRatio: '1.78',
+              orientation: OrientationType.HORIZONTAL,
+              format: 'unknown',
+              duration: 0,
+              bitrate: 0
+            })
           }
           
-          const width = videoStream.width
-          const height = videoStream.height
-          const aspectRatio = width / height
-          
-          // Calculate orientation
-          let orientation
-          if (aspectRatio < 1 || (width === height && width <= 1080)) {
-            // If width < height or it's a square video with mobile dimensions
-            orientation = OrientationType.VERTICAL
-          } else {
-            orientation = OrientationType.HORIZONTAL
+          try {
+            const videoStream = metadata.streams.find(stream => stream.codec_type === 'video')
+            
+            if (!videoStream) {
+              return reject(new Error('No video stream found'))
+            }
+            
+            const width = videoStream.width
+            const height = videoStream.height
+            const aspectRatio = width / height
+            
+            // Calculate orientation
+            let orientation
+            if (aspectRatio < 1 || (width === height && width <= 1080)) {
+              // If width < height or it's a square video with mobile dimensions
+              orientation = OrientationType.VERTICAL
+            } else {
+              orientation = OrientationType.HORIZONTAL
+            }
+            
+            resolve({
+              width,
+              height,
+              aspectRatio: aspectRatio.toFixed(2),
+              orientation,
+              format: videoStream.codec_name,
+              duration: metadata.format.duration,
+              bitrate: metadata.format.bit_rate
+            })
+          } catch (error) {
+            reject(error)
           }
-          
-          resolve({
-            width,
-            height,
-            aspectRatio: aspectRatio.toFixed(2),
-            orientation,
-            format: videoStream.codec_name,
-            duration: metadata.format.duration,
-            bitrate: metadata.format.bit_rate
-          })
-        } catch (error) {
-          reject(error)
-        }
-      })
+        })
+      } catch (error) {
+        console.error('FFmpeg not available:', error)
+        // Return default values if FFmpeg is not available
+        return resolve({
+          width: 1920,
+          height: 1080,
+          aspectRatio: '1.78',
+          orientation: OrientationType.HORIZONTAL,
+          format: 'unknown',
+          duration: 0,
+          bitrate: 0
+        })
+      }
     })
   }
   
