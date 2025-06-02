@@ -144,9 +144,13 @@ export const handleUpload = (type) => {
           
           // Process each form field
           for (const [key, value] of formData.entries()) {
-            console.log(`Processing field: ${key}, type:`, typeof value, value instanceof File ? 'File' : 'Not File');
+            console.log(`Processing field: ${key}, type:`, typeof value);
             
-            if (value instanceof File) {
+            // Check if value is a file by checking for common file properties instead of instanceof
+            const isFile = typeof value === 'object' && value !== null && 
+                          'name' in value && 'size' in value && 'type' in value;
+            
+            if (isFile) {
               console.log(`File details for ${key}:`, {
                 name: value.name,
                 size: value.size,
@@ -273,9 +277,6 @@ export const handleUpload = (type) => {
     }
   };
 };
-
-// Add this import at the top of the file with your other imports
-import busboy from 'busboy';
 
 // Export the getMultipleUploadProgress function
 export const getMultipleUploadProgress = async (c) => {
