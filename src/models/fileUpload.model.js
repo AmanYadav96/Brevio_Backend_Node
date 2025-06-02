@@ -48,6 +48,9 @@ const fileUploadSchema = new mongoose.Schema(
     },
     error: {
       type: String
+    },
+    uploadId: {
+      type: String
     }
   },
   { timestamps: true }
