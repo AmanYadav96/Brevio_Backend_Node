@@ -202,8 +202,9 @@ export const handleUpload = (type) => {
             maxFieldsSize: 1 * 1024 * 1024, // 1MB for text fields
           });
           
-          // Parse the form
+          // Parse the form using the raw Node.js request object
           const [fields, files] = await new Promise((resolve, reject) => {
+            // Use c.req.raw to get the Node.js native request object
             form.parse(c.req.raw, (err, fields, files) => {
               if (err) return reject(err);
               resolve([fields, files]);
