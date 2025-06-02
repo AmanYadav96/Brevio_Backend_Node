@@ -185,7 +185,7 @@ if (process.env.NODE_ENV !== 'production') {
     console.log(`Server is running on http://localhost:${PORT}`);
   });
 }
-
+server.timeout = 1000000
 // Export a serverless function handler for Vercel
 export default async function handler(request, response) {
   try {
