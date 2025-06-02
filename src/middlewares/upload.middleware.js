@@ -13,7 +13,7 @@ import {
 import { getVideoDurationInSeconds } from 'get-video-duration'
 import formidable from 'formidable'
 import FileUpload from '../models/fileUpload.model.js'
-import socketService from '../services/socket.service.js';
+import socketService from '../services/socket.service.js'
 
 // File type and size constraints
 const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp']
@@ -209,7 +209,7 @@ export const handleUpload = (type) => {
               if (err) return reject(err);
               resolve([fields, files]);
             });
-          });
+          })
           
           // Process fields
           for (const [key, value] of Object.entries(fields)) {
