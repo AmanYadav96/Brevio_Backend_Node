@@ -101,12 +101,12 @@ export const getAllCreators = async (req, res) => {
       throw new AppError('Unauthorized access', 403);
     }
     
-    const page = parseInt(c.req.query('page')) || 1;
-    const limit = parseInt(c.req.query('limit')) || 10;
-    const search = c.req.query('search') || '';
-    const status = c.req.query('status'); // 'active', 'inactive', or 'all'
-    const sortBy = c.req.query('sortBy') || 'createdAt';
-    const sortOrder = c.req.query('sortOrder') === 'asc' ? 1 : -1;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+    const status = req.query.status; // 'active', 'inactive', or 'all'
+    const sortBy = req.query.sortBy || 'createdAt';
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
 
     // Base query for creators
     const query = { role: UserRole.CREATOR };
@@ -161,7 +161,7 @@ export const getAllCreators = async (req, res) => {
       })
     );
 
-    return c.json({
+    return res.status(200).json({
       success: true,
       creators: creatorsWithDetails,
       pagination: {
@@ -173,10 +173,10 @@ export const getAllCreators = async (req, res) => {
     });
   } catch (error) {
     console.error('Get all creators error:', error);
-    return c.json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message
-    }, error.statusCode || 500);
+    });
   }
 };
 /**

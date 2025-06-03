@@ -127,6 +127,20 @@ app.get('/api-docs/debug', (req, res) => {
 // Error handling middleware
 app.use(errorHandler);
 
+// Process-level error handlers to prevent server shutdown
+process.on('uncaughtException', (error) => {
+  console.error('UNCAUGHT EXCEPTION! 💥');
+  console.error(error.name, error.message, error.stack);
+  // Log the error but keep the server running
+  // For truly fatal errors, you might want to use a process manager like PM2 to restart the process
+});
+
+process.on('unhandledRejection', (error) => {
+  console.error('UNHANDLED REJECTION! 💥');
+  console.error(error.name, error.message, error.stack);
+  // Log the error but keep the server running
+});
+
 // Create HTTP server
 const server = http.createServer(app);
 
