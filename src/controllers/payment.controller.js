@@ -9,9 +9,9 @@ import { createError } from '../utils/error.js'
 import mongoose from 'mongoose'
 
 // Create a payment
-export const createPayment = async (c) => {
+export const createPayment = async (req, res) => {
   try {
-    const userId = c.get('user')._id
+    const userId = req.user._id
     const {
       amount,
       currency = 'USD',
@@ -23,21 +23,21 @@ export const createPayment = async (c) => {
       donationId,
       channelSubscriptionId,
       metadata = {}
-    } = await c.req.json()
+    } = req.body
 
     // Validate required fields
     if (!amount || !paymentType || !paymentMethod) {
-      return c.json(createError(400, 'Missing required fields'), 400)
+      return res.status(400).json(createError(400, 'Missing required fields'))
     }
 
     // Validate payment type
     if (!Object.values(PaymentType).includes(paymentType)) {
-      return c.json(createError(400, 'Invalid payment type'), 400)
+      return res.status(400).json(createError(400, 'Invalid payment type'))
     }
 
     // Validate payment method
     if (!Object.values(PaymentMethod).includes(paymentMethod)) {
-      return c.json(createError(400, 'Invalid payment method'), 400)
+      return res.status(400).json(createError(400, 'Invalid payment method'))
     }
 
     // Calculate platform fee (example: 10% of the amount)
@@ -92,14 +92,14 @@ export const createPayment = async (c) => {
     const payment = new Payment(paymentData)
     await payment.save()
 
-    return c.json({
+    return res.status(201).json({
       success: true,
       message: 'Payment created successfully',
       payment
-    }, 201)
+    })
   } catch (error) {
-    console.error('Error creating payment:', error)
-    return c.json(createError(500, 'Error creating payment'), 500)
+    console.error('Create payment error:', error)
+    return res.status(500).json(createError(500, error.message || 'Failed to create payment'))
   }
 }
 

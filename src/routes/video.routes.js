@@ -1,4 +1,4 @@
-import { Hono } from "hono"
+import express from "express"
 import { protect } from "../middlewares/auth.middleware.js"
 import { handleUpload } from "../middlewares/upload.middleware.js"
 import {
@@ -9,7 +9,7 @@ import {
   deleteVideo
 } from "../controllers/video.controller.js"
 
-const router = new Hono()
+const router = express.Router()
 
 router.get("/", getAllVideos)
 router.get("/:id", getVideo)

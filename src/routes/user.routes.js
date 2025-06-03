@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import express from 'express'
 import { 
   getAllUsers, 
   getUser, 
@@ -11,20 +11,20 @@ import {
 import { protect, restrictTo } from '../middlewares/auth.middleware.js'
 import { handleUpload, optionalUpload } from '../middlewares/upload.middleware.js'
 
-const app = new Hono()
+const router = express.Router()
 
 // Apply authentication middleware to all routes
-app.use('*', protect)
+router.use(protect)
 
 // User profile routes (for regular users)
-app.get('/profile', getUserProfile)
-app.patch('/profile', optionalUpload, updateUserProfile)
+router.get('/profile', getUserProfile)
+router.patch('/profile', optionalUpload, updateUserProfile)
 
 // Admin routes
-app.get('/', restrictTo('admin'), getAllUsers)
-app.get('/stats', restrictTo('admin'), getUserStats)
-app.get('/:id', restrictTo('admin'), getUser)
-app.patch('/:id', restrictTo('admin'), updateUser)
-app.delete('/:id', restrictTo('admin'), deleteUser)
+router.get('/', restrictTo('admin'), getAllUsers)
+router.get('/stats', restrictTo('admin'), getUserStats)
+router.get('/:id', restrictTo('admin'), getUser)
+router.patch('/:id', restrictTo('admin'), updateUser)
+router.delete('/:id', restrictTo('admin'), deleteUser)
 
-export default app
+export default router

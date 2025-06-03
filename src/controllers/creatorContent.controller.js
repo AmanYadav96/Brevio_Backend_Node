@@ -5,49 +5,30 @@ import User, { UserRole } from '../models/user.model.js'
 import mongoose from 'mongoose'
 
 // Create new content
-export const createContent = async (c) => {
+export const createContent = async (req, res) => {
   try {
-    const user = c.get('user')
-    const uploads = c.get('uploads') || {}
+    const user = req.user
+    const uploads = req.uploads || {}
     
     // Get body data - either from middleware or from request
-    let body = c.get('body')
-    
-    // If body wasn't set by middleware, try to get it from request
-    if (!body || Object.keys(body).length === 0) {
-      try {
-        // Try to parse as JSON first
-        body = await c.req.json()
-      } catch (jsonError) {
-        try {
-          // If JSON parsing fails, try to parse as FormData
-          body = await c.req.parseBody()
-        } catch (formError) {
-          console.error('Failed to parse request body:', jsonError, formError)
-          return c.json({
-            success: false,
-            message: 'Failed to parse request body. Please ensure you are sending valid JSON or FormData.'
-          }, 400)
-        }
-      }
-    }
+    let body = req.body
     
     // Ensure we have valid data
     if (!body || Object.keys(body).length === 0) {
-      return c.json({
+      return res.status(400).json({
         success: false,
         message: 'No content data provided'
-      }, 400)
+      })
     }
     
     console.log('Content data being processed:', JSON.stringify(body, null, 2))
     
     // Check if user is creator or admin
     if (user.role !== UserRole.CREATOR && user.role !== UserRole.ADMIN) {
-      return c.json({ 
+      return res.status(403).json({ 
         success: false, 
         message: "Only creators and admins can upload content" 
-      }, 403)
+      })
     }
     
     // Process video metadata for orientation validation
@@ -59,10 +40,10 @@ export const createContent = async (c) => {
       try {
         videoProcessorService.validateOrientation(videoMetadata, body.orientation)
       } catch (error) {
-        return c.json({ 
+        return res.status(400).json({ 
           success: false, 
           message: error.message 
-        }, 400)
+        })
       }
     }
     
@@ -100,68 +81,24 @@ export const createContent = async (c) => {
       trailerDuration: uploads.trailerDuration || body.mediaAssets?.trailerDuration
     }
     
-    // For short films, add video URL and duration
-    if (body.contentType === ContentType.SHORT_FILM) {
-      // Ensure videoUrl is set - this fixes the "Video URL is required" error
-      contentData.videoUrl = uploads.videoFile || body.videoUrl || 'placeholder-url';
-      contentData.duration = videoMetadata.duration || body.duration
+    // Add video file if present
+    if (uploads.videoFile) {
+      contentData.videoUrl = uploads.videoFile
     }
     
     const content = await CreatorContent.create(contentData)
     
-    // Send email notification
-    try {
-      const { default: emailService } = await import('../services/email.service.js');
-      
-      // Send email to creator
-      await emailService.sendContentUploadedEmail({
-        to: user.email,
-        userName: user.name,
-        contentTitle: content.title,
-        contentType: content.contentType,
-        contentId: content._id,
-        isAutoApproved: user.role === UserRole.ADMIN
-      });
-      
-      // If creator is not admin, send notification to admins
-      if (user.role !== UserRole.ADMIN) {
-        // Find admin emails
-        const admins = await User.find({ role: UserRole.ADMIN }).select('email name');
-        
-        if (admins.length > 0) {
-          // Send notification to each admin
-          for (const admin of admins) {
-            await emailService.sendContentReviewNotificationEmail({
-              to: admin.email,
-              adminName: admin.name,
-              creatorName: user.name,
-              contentTitle: content.title,
-              contentType: content.contentType,
-              contentId: content._id
-            });
-          }
-        }
-      }
-      
-      console.log(`Content upload email sent to ${user.email}`);
-    } catch (emailError) {
-      // Log error but don't fail the request
-      console.error("Error sending content upload email:", emailError);
-    }
-    
-    return c.json({ 
-      success: true, 
-      content,
-      message: user.role === UserRole.ADMIN ? 
-        "Content published successfully" : 
-        "Content submitted for review"
-    }, 201)
+    return res.status(201).json({
+      success: true,
+      message: 'Content created successfully',
+      content
+    })
   } catch (error) {
-    console.error("Create content error:", error)
-    return c.json({ 
-      success: false, 
-      message: error.message 
-    }, 500)
+    console.error('Create content error:', error)
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to create content'
+    })
   }
 }
 

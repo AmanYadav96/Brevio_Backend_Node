@@ -1,4 +1,4 @@
-import { Hono } from "hono"
+import express from "express"
 import { protect, restrictTo } from "../middlewares/auth.middleware.js"
 import { UserRole } from "../models/user.model.js"
 import { handleUpload } from "../middlewares/upload.middleware.js"
@@ -15,7 +15,7 @@ import {
   purchaseEducationalContent
 } from "../controllers/creatorContent.controller.js"
 
-const router = new Hono()
+const router = express.Router()
 
 // Content creation routes - new workflow
 router.post("/basic", protect, createContentBasic)
@@ -36,8 +36,5 @@ router.get("/", protect, getAllContent)
 
 // Purchase route
 router.post("/:contentId/purchase", protect, purchaseEducationalContent)
-
-// Direct upload routes
-
 
 export default router

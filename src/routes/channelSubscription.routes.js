@@ -1,4 +1,4 @@
-import { Hono } from "hono"
+import express from "express"
 import { 
   subscribeToChannel, 
   getUserSubscriptions, 
@@ -12,32 +12,32 @@ import {
 } from "../controllers/channelSubscription.controller.js"
 import { protect } from "../middlewares/auth.middleware.js"
 
-const app = new Hono()
+const router = express.Router()
 
 // All routes require authentication
-app.use("*", protect)
+router.use(protect)
 
 // Subscribe to a channel
-app.post("/", subscribeToChannel)
+router.post("/", subscribeToChannel)
 
 // Get all channels a user is subscribed to
-app.get("/my-subscriptions", getUserSubscriptions)
+router.get("/my-subscriptions", getUserSubscriptions)
 
 // Get all subscribers of a channel
-app.get("/channel/:channelId/subscribers", getChannelSubscribers)
+router.get("/channel/:channelId/subscribers", getChannelSubscribers)
 
 // Cancel a subscription
-app.patch("/:subscriptionId/cancel", cancelSubscription)
+router.patch("/:subscriptionId/cancel", cancelSubscription)
 
 // Check if user is subscribed to a channel
-app.get("/check/:channelId", checkSubscription)
+router.get("/check/:channelId", checkSubscription)
 
-// Update last watched time
-app.patch("/:channelId/watch", updateLastWatched)
+// Update last watched content
+router.patch("/last-watched", updateLastWatched)
 
-// Course purchase endpoints
-app.post("/purchase-course", addPurchasedCourse)
-app.get("/my-courses", getUserPurchasedCourses)
-app.get("/check-course/:contentId", checkCoursePurchase)
+// Course purchase routes
+router.post("/courses", addPurchasedCourse)
+router.get("/courses", getUserPurchasedCourses)
+router.get("/courses/:contentId", checkCoursePurchase)
 
-export default app
+export default router

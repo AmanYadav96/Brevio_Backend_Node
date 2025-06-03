@@ -1,16 +1,17 @@
-import { Hono } from "hono"
+import express from "express"
 import { createPlan, getAllPlans, getPlan, updatePlan, deletePlan } from "../controllers/subscription.controller.js"
 import { protect, restrictTo } from "../middlewares/auth.middleware.js"
+import { UserRole } from "../models/user.model.js"
 
-const app = new Hono()
+const router = express.Router()
 
 // Public routes
-app.get("/", getAllPlans)
-app.get("/:id", getPlan)
+router.get("/", getAllPlans)
+router.get("/:id", getPlan)
 
 // Admin only routes
-app.post("/", protect, restrictTo('admin'), createPlan)
-app.put("/:id", protect, restrictTo('admin'), updatePlan)
-app.delete("/:id", protect, restrictTo('admin'), deletePlan)
+router.post("/", protect, restrictTo(UserRole.ADMIN), createPlan)
+router.put("/:id", protect, restrictTo(UserRole.ADMIN), updatePlan)
+router.delete("/:id", protect, restrictTo(UserRole.ADMIN), deletePlan)
 
-export default app
+export default router

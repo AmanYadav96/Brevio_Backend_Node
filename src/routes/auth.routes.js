@@ -1,4 +1,4 @@
-import { Hono } from "hono"
+import express from 'express';
 import { 
   register, 
   login, 
@@ -6,21 +6,21 @@ import {
   facebookAuth, 
   appleAuth,
   becomeCreator 
-} from "../controllers/auth.controller.js"
-import { protect } from "../middlewares/auth.middleware.js"
+} from "../controllers/auth.controller.js";
+import { protect } from "../middlewares/auth.middleware.js";
 
-const router = new Hono()
+const router = express.Router();
 
 // Email/password authentication
-router.post("/register", register)
-router.post("/login", login)
+router.post("/register", register);
+router.post("/login", login);
 
 // Social authentication
-router.post("/google", googleLogin)
-router.post("/facebook", facebookAuth)
-router.post("/apple", appleAuth)
+router.post("/google", googleLogin);
+router.post("/facebook", facebookAuth);
+router.post("/apple", appleAuth);
 
 // Creator upgrade route
-router.post("/become-creator", protect, becomeCreator)
+router.post("/become-creator", protect, becomeCreator);
 
-export default router
+export default router;

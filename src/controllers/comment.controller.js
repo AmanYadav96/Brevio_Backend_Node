@@ -2,36 +2,36 @@ import Comment from '../models/comment.model.js'
 import { AppError } from '../utils/app-error.js'
 
 // Create a comment
-export const createComment = async (c) => {
+export const createComment = async (req, res) => {
   try {
-    const userId = c.get('user')._id
-    const { contentType, contentId, text, parentComment } = await c.req.json()
+    const userId = req.user._id
+    const { contentType, contentId, text, parentComment } = req.body
     
     // Validate content type
     if (!['content', 'creatorContent'].includes(contentType)) {
-      throw new AppError('Invalid content type', 400)
+      return res.status(400).json({ success: false, message: 'Invalid content type' })
     }
     
     // Validate text
     if (!text || text.trim().length === 0) {
-      throw new AppError('Comment text is required', 400)
+      return res.status(400).json({ success: false, message: 'Comment text is required' })
     }
     
     // If it's a reply, check if parent comment exists
     if (parentComment) {
       const parent = await Comment.findById(parentComment)
       if (!parent) {
-        throw new AppError('Parent comment not found', 404)
+        return res.status(404).json({ success: false, message: 'Parent comment not found' })
       }
       
       // Ensure the parent comment is for the same content
       if (parent.contentId.toString() !== contentId || parent.contentType !== contentType) {
-        throw new AppError('Invalid parent comment', 400)
+        return res.status(400).json({ success: false, message: 'Invalid parent comment' })
       }
       
       // Prevent nested replies (only one level of nesting)
       if (parent.parentComment) {
-        throw new AppError('Cannot reply to a reply', 400)
+        return res.status(400).json({ success: false, message: 'Cannot reply to a reply' })
       }
     }
     
@@ -49,17 +49,14 @@ export const createComment = async (c) => {
     // Populate user info
     await comment.populate('user', 'name profilePicture')
     
-    return c.json({
+    return res.json({
       success: true,
       message: 'Comment created successfully',
       comment
-    }, 201)
+    })
   } catch (error) {
-    console.error('Create comment error:', error)
-    return c.json({
-      success: false,
-      message: error.message || 'Failed to create comment'
-    }, error.statusCode || 500)
+    console.error('Error creating comment:', error)
+    return res.status(500).json({ success: false, message: 'Error creating comment' })
   }
 }
 

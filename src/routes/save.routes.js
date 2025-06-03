@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import express from 'express'
 import { 
   toggleSave, 
   checkSaved, 
@@ -7,13 +7,13 @@ import {
 } from '../controllers/save.controller.js'
 import { protect } from '../middlewares/auth.middleware.js'
 
-const app = new Hono()
+const router = express.Router()
 
 // All routes require authentication
-app.use('*', protect)
-app.post('/toggle', toggleSave)
-app.get('/check', checkSaved)
-app.get('/', getSavedContent)
-app.patch('/:id', updateSavedFolder)
+router.use(protect)
+router.post('/toggle', toggleSave)
+router.get('/check', checkSaved)
+router.get('/', getSavedContent)
+router.patch('/:id', updateSavedFolder)
 
-export default app
+export default router

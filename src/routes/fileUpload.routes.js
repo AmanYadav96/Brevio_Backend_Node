@@ -1,19 +1,14 @@
-import { Hono } from "hono"
-import { protect, restrictTo } from "../middlewares/auth.middleware.js"
-import { UserRole } from "../models/user.model.js"
-import { 
-  getUploadStats, 
-  getRecentUploads,
-  getAdminStorageStats
-} from "../controllers/fileUpload.controller.js"
+import express from "express"
+import { protect } from "../middlewares/auth.middleware.js"
+import { handleUpload } from "../middlewares/upload.middleware.js"
+import {  getUploadStats } from "../controllers/fileUpload.controller.js"
 
-const router = new Hono()
+const router = express.Router()
 
-// User routes
-router.get("/stats", protect, getUploadStats)
-router.get("/recent", protect, getRecentUploads)
+// Upload file route
+// router.post("/", protect, handleUpload('FILE'), uploadFile)
 
-// Admin routes
-router.get("/admin/stats", protect, restrictTo(UserRole.ADMIN), getAdminStorageStats)
+// Get upload status
+router.get("/:fileId/status", protect, getUploadStats)
 
 export default router

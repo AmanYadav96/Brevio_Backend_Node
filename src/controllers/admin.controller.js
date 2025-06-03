@@ -6,12 +6,13 @@ import mongoose from 'mongoose';
 
 /**
  * Get admin dashboard statistics
- * @param {Object} c - Context
+ * @param {Object} req - Request
+ * @param {Object} res - Response
  * @returns {Object} Dashboard statistics
  */
-export const getDashboardStats = async (c) => {
+export const getDashboardStats = async (req, res) => {
   try {
-    const user = c.get('user');
+    const user = req.user;
     
     // Check if user is admin
     if (user.role !== UserRole.ADMIN) {
@@ -54,7 +55,7 @@ export const getDashboardStats = async (c) => {
       .limit(5)
       .select('name email createdAt isActive isBlocked');
     
-    return c.json({
+    return res.json({
       success: true,
       stats: {
         creators: {
@@ -78,27 +79,28 @@ export const getDashboardStats = async (c) => {
     });
   } catch (error) {
     console.error('Get dashboard stats error:', error);
-    return c.json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message
-    }, error.statusCode || 500);
+    });
   }
 };
 
 /**
  * Get all creators with detailed information
- * @param {Object} c - Context
+ * @param {Object} req - Request
+ * @param {Object} res - Response
  * @returns {Object} List of creators with pagination
  */
-export const getAllCreators = async (c) => {
+export const getAllCreators = async (req, res) => {
   try {
-    const user = c.get('user');
+    const user = req.user;
 
     // Only admin allowed
     if (user.role !== UserRole.ADMIN) {
       throw new AppError('Unauthorized access', 403);
     }
-
+    
     const page = parseInt(c.req.query('page')) || 1;
     const limit = parseInt(c.req.query('limit')) || 10;
     const search = c.req.query('search') || '';

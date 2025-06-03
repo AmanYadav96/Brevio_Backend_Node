@@ -6,19 +6,19 @@ import CreatorContent from '../models/creatorContent.model.js'
 import { createError } from '../utils/error.js'
 
 // Create a new donation
-export const createDonation = async (c) => {
+export const createDonation = async (req, res) => {
   try {
-    const userId = c.get('user')._id
-    const { contentId, contentType, amount, message, currency = 'USD' } = await c.req.json()
+    const userId = req.user._id
+    const { contentId, contentType, amount, message, currency = 'USD' } = req.body
     
     // Validate required fields
     if (!contentId || !contentType || !amount) {
-      return c.json(createError(400, 'Missing required fields'), 400)
+      return res.status(400).json(createError(400, 'Missing required fields'))
     }
     
     // Validate content type
     if (!['video', 'short', 'series', 'course'].includes(contentType)) {
-      return c.json(createError(400, 'Invalid content type'), 400)
+      return res.status(400).json(createError(400, 'Invalid content type'))
     }
     
     // Find the content and creator
@@ -29,21 +29,21 @@ export const createDonation = async (c) => {
       case 'short':
         const video = await Video.findById(contentId)
         if (!video) {
-          return c.json(createError(404, 'Video not found'), 404)
+          return res.status(404).json(createError(404, 'Video not found'))
         }
         creatorId = video.userId
         break
       case 'series':
         const content = await Content.findById(contentId)
         if (!content) {
-          return c.json(createError(404, 'Series not found'), 404)
+          return res.status(404).json(createError(404, 'Series not found'))
         }
         creatorId = content.userId
         break
       case 'course':
         const creatorContent = await CreatorContent.findById(contentId)
         if (!creatorContent) {
-          return c.json(createError(404, 'Course not found'), 404)
+          return res.status(404).json(createError(404, 'Course not found'))
         }
         creatorId = creatorContent.creatorId
         break
@@ -63,25 +63,25 @@ export const createDonation = async (c) => {
     
     await donation.save()
     
-    return c.json({
+    return res.json({
       success: true,
       message: 'Donation created successfully',
       donation
     })
   } catch (error) {
     console.error('Error creating donation:', error)
-    return c.json(createError(500, 'Error creating donation'), 500)
+    return res.status(500).json(createError(500, 'Error creating donation'))
   }
 }
 
 // Process donation payment
-export const processDonation = async (c) => {
+export const processDonation = async (req, res) => {
   try {
-    const { donationId, paymentId } = await c.req.json()
+    const { donationId, paymentId } = req.body
     
     const donation = await Donation.findById(donationId)
     if (!donation) {
-      return c.json(createError(404, 'Donation not found'), 404)
+      return res.status(404).json(createError(404, 'Donation not found'))
     }
     
     // Update donation with payment info
@@ -89,23 +89,23 @@ export const processDonation = async (c) => {
     donation.status = 'completed'
     await donation.save()
     
-    return c.json({
+    return res.json({
       success: true,
       message: 'Donation processed successfully',
       donation
     })
   } catch (error) {
     console.error('Error processing donation:', error)
-    return c.json(createError(500, 'Error processing donation'), 500)
+    return res.status(500).json(createError(500, 'Error processing donation'))
   }
 }
 
 // Get donations by user
-export const getUserDonations = async (c) => {
+export const getUserDonations = async (req, res) => {
   try {
-    const userId = c.get('user')._id
-    const page = parseInt(c.req.query('page')) || 1
-    const limit = parseInt(c.req.query('limit')) || 10
+    const userId = req.user._id
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 10
     
     const donations = await Donation.find({ userId })
       .sort({ createdAt: -1 })
@@ -115,7 +115,7 @@ export const getUserDonations = async (c) => {
     
     const total = await Donation.countDocuments({ userId })
     
-    return c.json({
+    return res.json({
       success: true,
       donations,
       pagination: {
@@ -126,16 +126,16 @@ export const getUserDonations = async (c) => {
     })
   } catch (error) {
     console.error('Error getting user donations:', error)
-    return c.json(createError(500, 'Error getting user donations'), 500)
+    return res.status(500).json(createError(500, 'Error getting user donations'))
   }
 }
 
 // Get donations for a creator
-export const getCreatorDonations = async (c) => {
+export const getCreatorDonations = async (req, res) => {
   try {
-    const creatorId = c.get('user')._id
-    const page = parseInt(c.req.query('page')) || 1
-    const limit = parseInt(c.req.query('limit')) || 10
+    const creatorId = req.user._id
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 10
     
     const donations = await Donation.find({ creatorId, status: 'completed' })
       .sort({ createdAt: -1 })
@@ -149,7 +149,7 @@ export const getCreatorDonations = async (c) => {
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ])
     
-    return c.json({
+    return res.json({
       success: true,
       donations,
       stats: {
@@ -164,16 +164,16 @@ export const getCreatorDonations = async (c) => {
     })
   } catch (error) {
     console.error('Error getting creator donations:', error)
-    return c.json(createError(500, 'Error getting creator donations'), 500)
+    return res.status(500).json(createError(500, 'Error getting creator donations'))
   }
 }
 
 // Get donations for a specific content
-export const getContentDonations = async (c) => {
+export const getContentDonations = async (req, res) => {
   try {
-    const { contentId, contentType } = c.req.param()
-    const page = parseInt(c.req.query('page')) || 1
-    const limit = parseInt(c.req.query('limit')) || 10
+    const { contentId, contentType } = req.params
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 10
     
     const donations = await Donation.find({ 
       contentId, 
@@ -202,7 +202,7 @@ export const getContentDonations = async (c) => {
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ])
     
-    return c.json({
+    return res.json({
       success: true,
       donations,
       stats: {
@@ -217,6 +217,6 @@ export const getContentDonations = async (c) => {
     })
   } catch (error) {
     console.error('Error getting content donations:', error)
-    return c.json(createError(500, 'Error getting content donations'), 500)
+    return res.status(500).json(createError(500, 'Error getting content donations'))
   }
 }

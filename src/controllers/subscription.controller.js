@@ -1,104 +1,104 @@
 import SubscriptionPlan from "../models/subscription.model.js"
 import { AppError } from "../utils/app-error.js"
 
-export const createPlan = async (c) => {
+export const createPlan = async (req, res) => {
   try {
-    const body = await c.req.json()
+    const body = req.body
     const plan = await SubscriptionPlan.create(body)
-    return c.json({ success: true, plan }, 201)
+    return res.status(201).json({ success: true, plan })
   } catch (error) {
     if (error.code === 11000) {
-      return c.json({ 
+      return res.status(400).json({ 
         success: false, 
         message: `Plan with name "${error.keyValue.name}" already exists` 
-      }, 400)
+      })
     }
     if (error.name === "ValidationError") {
-      return c.json({ 
+      return res.status(400).json({ 
         success: false, 
         message: Object.values(error.errors).map(err => err.message).join(", ") 
-      }, 400)
+      })
     }
     console.error("Create plan error:", error)
-    return c.json({ success: false, message: "Failed to create plan" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to create plan" })
   }
 }
 
-export const getAllPlans = async (c) => {
+export const getAllPlans = async (req, res) => {
   try {
     const plans = await SubscriptionPlan.find({ isActive: true })
-    return c.json({ success: true, plans })
+    return res.json({ success: true, plans })
   } catch (error) {
     console.error("Get all plans error:", error)
-    return c.json({ success: false, message: "Failed to fetch plans" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to fetch plans" })
   }
 }
 
-export const getPlan = async (c) => {
+export const getPlan = async (req, res) => {
   try {
-    const plan = await SubscriptionPlan.findById(c.req.param("id"))
+    const plan = await SubscriptionPlan.findById(req.params.id)
     if (!plan || !plan.isActive) {
-      return c.json({ success: false, message: "Plan not found" }, 404)
+      return res.status(404).json({ success: false, message: "Plan not found" })
     }
-    return c.json({ success: true, plan })
+    return res.json({ success: true, plan })
   } catch (error) {
     if (error.name === "CastError") {
-      return c.json({ success: false, message: "Invalid plan ID" }, 400)
+      return res.status(400).json({ success: false, message: "Invalid plan ID" })
     }
     console.error("Get plan error:", error)
-    return c.json({ success: false, message: "Failed to fetch plan" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to fetch plan" })
   }
 }
 
-export const updatePlan = async (c) => {
+export const updatePlan = async (req, res) => {
   try {
-    const body = await c.req.json()
+    const body = req.body
     const plan = await SubscriptionPlan.findByIdAndUpdate(
-      c.req.param("id"),
+      req.params.id,
       { $set: body },
       { new: true, runValidators: true }
     )
     if (!plan) {
-      return c.json({ success: false, message: "Plan not found" }, 404)
+      return res.status(404).json({ success: false, message: "Plan not found" })
     }
-    return c.json({ success: true, plan })
+    return res.json({ success: true, plan })
   } catch (error) {
     if (error.code === 11000) {
-      return c.json({ 
+      return res.status(400).json({ 
         success: false, 
         message: `Plan with name "${error.keyValue.name}" already exists` 
-      }, 400)
+      })
     }
     if (error.name === "CastError") {
-      return c.json({ success: false, message: "Invalid plan ID" }, 400)
+      return res.status(400).json({ success: false, message: "Invalid plan ID" })
     }
     if (error.name === "ValidationError") {
-      return c.json({ 
+      return res.status(400).json({ 
         success: false, 
         message: Object.values(error.errors).map(err => err.message).join(", ") 
-      }, 400)
+      })
     }
     console.error("Update plan error:", error)
-    return c.json({ success: false, message: "Failed to update plan" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to update plan" })
   }
 }
 
-export const deletePlan = async (c) => {
+export const deletePlan = async (req, res) => {
   try {
     const plan = await SubscriptionPlan.findByIdAndUpdate(
-      c.req.param("id"),
+      req.params.id,
       { isActive: false },
       { new: true }
     )
     if (!plan) {
-      return c.json({ success: false, message: "Plan not found" }, 404)
+      return res.status(404).json({ success: false, message: "Plan not found" })
     }
-    return c.json({ success: true, message: "Plan deleted successfully" })
+    return res.json({ success: true, message: "Plan deleted successfully" })
   } catch (error) {
     if (error.name === "CastError") {
-      return c.json({ success: false, message: "Invalid plan ID" }, 400)
+      return res.status(400).json({ success: false, message: "Invalid plan ID" })
     }
     console.error("Delete plan error:", error)
-    return c.json({ success: false, message: "Failed to delete plan" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to delete plan" })
   }
 }

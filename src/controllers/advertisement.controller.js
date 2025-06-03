@@ -1,9 +1,9 @@
 import Advertisement from "../models/advertisement.model.js"
 
-export const createAdvertisement = async (c) => {
+export const createAdvertisement = async (req, res) => {
   try {
-    const uploads = c.get('uploads')
-    const body = await c.req.json()
+    const uploads = req.uploads
+    const body = req.body
 
     if (uploads.thumbnail) {
       body.thumbnail = uploads.thumbnail
@@ -14,20 +14,20 @@ export const createAdvertisement = async (c) => {
     }
 
     const advertisement = await Advertisement.create(body)
-    return c.json({ success: true, advertisement }, 201)
+    return res.status(201).json({ success: true, advertisement })
   } catch (error) {
     console.error("Create advertisement error:", error)
-    return c.json({ success: false, message: "Failed to create advertisement" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to create advertisement" })
   }
 }
 
-export const getAllAdvertisements = async (c) => {
+export const getAllAdvertisements = async (req, res) => {
   try {
-    const page = parseInt(c.req.query('page')) || 1
+    const page = parseInt(req.query.page) || 1
     const limit = 10
     const skip = (page - 1) * limit
-    const status = c.req.query('status')
-    const deviceType = c.req.query('deviceType')
+    const status = req.query.status
+    const deviceType = req.query.deviceType
 
     const query = { isActive: true }
     if (status) query.status = status
@@ -42,7 +42,7 @@ export const getAllAdvertisements = async (c) => {
       Advertisement.countDocuments(query)
     ])
 
-    return c.json({
+    return res.json({
       success: true,
       advertisements,
       pagination: {
@@ -54,41 +54,57 @@ export const getAllAdvertisements = async (c) => {
     })
   } catch (error) {
     console.error("Get advertisements error:", error)
-    return c.json({ success: false, message: "Failed to fetch advertisements" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to fetch advertisements" })
   }
 }
 
-export const updateAdvertisement = async (c) => {
+// Get advertisement by ID
+export const getAdvertisementById = async (req, res) => {
   try {
-    const body = await c.req.json()
+    const advertisement = await Advertisement.findById(req.params.id)
+    
+    if (!advertisement || !advertisement.isActive) {
+      return res.status(404).json({ success: false, message: "Advertisement not found" })
+    }
+    
+    return res.json({ success: true, advertisement })
+  } catch (error) {
+    console.error("Get advertisement by ID error:", error)
+    return res.status(500).json({ success: false, message: "Failed to fetch advertisement" })
+  }
+}
+
+export const updateAdvertisement = async (req, res) => {
+  try {
+    const body = req.body
     const advertisement = await Advertisement.findByIdAndUpdate(
-      c.req.param("id"),
+      req.params.id,
       { $set: body },
       { new: true, runValidators: true }
     )
     if (!advertisement) {
-      return c.json({ success: false, message: "Advertisement not found" }, 404)
+      return res.status(404).json({ success: false, message: "Advertisement not found" })
     }
-    return c.json({ success: true, advertisement })
+    return res.json({ success: true, advertisement })
   } catch (error) {
     console.error("Update advertisement error:", error)
-    return c.json({ success: false, message: "Failed to update advertisement" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to update advertisement" })
   }
 }
 
-export const deleteAdvertisement = async (c) => {
+export const deleteAdvertisement = async (req, res) => {
   try {
     const advertisement = await Advertisement.findByIdAndUpdate(
-      c.req.param("id"),
+      req.params.id,
       { isActive: false },
       { new: true }
     )
     if (!advertisement) {
-      return c.json({ success: false, message: "Advertisement not found" }, 404)
+      return res.status(404).json({ success: false, message: "Advertisement not found" })
     }
-    return c.json({ success: true, message: "Advertisement deleted successfully" })
+    return res.json({ success: true, message: "Advertisement deleted successfully" })
   } catch (error) {
     console.error("Delete advertisement error:", error)
-    return c.json({ success: false, message: "Failed to delete advertisement" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to delete advertisement" })
   }
 }

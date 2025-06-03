@@ -2,11 +2,11 @@ import Content from "../models/content.model.js"
 import { getVideoDuration } from "../utils/videoProcessor.js"
 
 // Create new content
-export const createContent = async (c) => {
+export const createContent = async (req, res) => {
   try {
-    const uploads = c.get('uploads')
-    const fileUploads = c.get('fileUploads') || []
-    const body = await c.req.json()
+    const uploads = req.uploads
+    const fileUploads = req.fileUploads || []
+    const body = req.body
     
     // Handle file uploads
     if (uploads.videoFile) {
@@ -56,17 +56,17 @@ export const createContent = async (c) => {
       })
     }
     
-    return c.json({ success: true, content }, 201)
+    return res.status(201).json({ success: true, content })
   } catch (error) {
     console.error("Create content error:", error)
-    return c.json({ success: false, message: error.message }, 500)
+    return res.status(500).json({ success: false, message: error.message })
   }
 }
 
 // Get all content
-export const getAllContent = async (c) => {
+export const getAllContent = async (req, res) => {
   try {
-    const { page = 1, limit = 10, contentType, channel } = c.req.query()
+    const { page = 1, limit = 10, contentType, channel } = req.query
     
     const query = {}
     if (contentType) query.contentType = contentType
@@ -83,7 +83,7 @@ export const getAllContent = async (c) => {
       Content.countDocuments(query)
     ])
     
-    return c.json({
+    return res.json({
       success: true,
       content,
       pagination: {
@@ -94,35 +94,35 @@ export const getAllContent = async (c) => {
       }
     })
   } catch (error) {
-    return c.json({ success: false, message: error.message }, 500)
+    return res.status(500).json({ success: false, message: error.message })
   }
 }
 
 // Get content by ID
-export const getContent = async (c) => {
+export const getContent = async (req, res) => {
   try {
-    const { id } = c.req.param()
+    const { id } = req.params
     
     const content = await Content.findById(id)
       .populate('channel', 'name')
       .populate('genres', 'name')
     
     if (!content) {
-      return c.json({ success: false, message: "Content not found" }, 404)
+      return res.status(404).json({ success: false, message: "Content not found" })
     }
     
-    return c.json({ success: true, content })
+    return res.json({ success: true, content })
   } catch (error) {
-    return c.json({ success: false, message: error.message }, 500)
+    return res.status(500).json({ success: false, message: error.message })
   }
 }
 
 // Update content
-export const updateContent = async (c) => {
+export const updateContent = async (req, res) => {
   try {
-    const { id } = c.req.param()
-    const uploads = c.get('uploads')
-    const body = await c.req.json()
+    const { id } = req.params
+    const uploads = req.uploads
+    const body = req.body
     
     // Handle file uploads (similar to create)
     if (uploads.videoFile) {
@@ -169,39 +169,39 @@ export const updateContent = async (c) => {
     })
     
     if (!content) {
-      return c.json({ success: false, message: "Content not found" }, 404)
+      return res.status(404).json({ success: false, message: "Content not found" })
     }
     
-    return c.json({ success: true, content })
+    return res.json({ success: true, content })
   } catch (error) {
-    return c.json({ success: false, message: error.message }, 500)
+    return res.status(500).json({ success: false, message: error.message })
   }
 }
 
 // Delete content
-export const deleteContent = async (c) => {
+export const deleteContent = async (req, res) => {
   try {
-    const { id } = c.req.param()
+    const { id } = req.params
     
     const content = await Content.findByIdAndDelete(id)
     
     if (!content) {
-      return c.json({ success: false, message: "Content not found" }, 404)
+      return res.status(404).json({ success: false, message: "Content not found" })
     }
     
-    return c.json({ 
+    return res.json({ 
       success: true, 
       message: "Content deleted successfully" 
     })
   } catch (error) {
-    return c.json({ success: false, message: error.message }, 500)
+    return res.status(500).json({ success: false, message: error.message })
   }
 }
 
 // Increment view count
-export const incrementViews = async (c) => {
+export const incrementViews = async (req, res) => {
   try {
-    const { id } = c.req.param()
+    const { id } = req.params
     
     const content = await Content.findByIdAndUpdate(
       id,
@@ -210,11 +210,11 @@ export const incrementViews = async (c) => {
     )
     
     if (!content) {
-      return c.json({ success: false, message: "Content not found" }, 404)
+      return res.status(404).json({ success: false, message: "Content not found" })
     }
     
-    return c.json({ success: true, views: content.views })
+    return res.json({ success: true, views: content.views })
   } catch (error) {
-    return c.json({ success: false, message: error.message }, 500)
+    return res.status(500).json({ success: false, message: error.message })
   }
 }

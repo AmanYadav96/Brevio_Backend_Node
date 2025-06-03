@@ -5,27 +5,27 @@ import { createError } from '../utils/error.js'
 import mongoose from 'mongoose'
 
 // Create a new report
-export const createReport = async (c) => {
+export const createReport = async (req, res) => {
   try {
-    const userId = c.get('user')._id
-    const uploads = c.get('uploads')
+    const userId = req.user._id
+    const uploads = req.uploads
     
-    // OPTION 1: Use the body that was set by the upload middleware
-    const body = c.get('body')
+    // Get the body from the request
+    const body = req.body
     
     // Validate required fields
     if (!body.contentId || !body.contentType || !body.issueType || !body.description) {
-      return c.json(createError(400, 'Missing required fields'), 400)
+      return res.status(400).json(createError(400, 'Missing required fields'))
     }
     
     // Validate issue type
     if (!Object.values(ReportIssueType).includes(body.issueType)) {
-      return c.json(createError(400, 'Invalid issue type'), 400)
+      return res.status(400).json(createError(400, 'Invalid issue type'))
     }
     
     // Validate content type
     if (!Object.values(ContentType).includes(body.contentType)) {
-      return c.json(createError(400, 'Invalid content type'), 400)
+      return res.status(400).json(createError(400, 'Invalid content type'))
     }
     
     // Get content details based on content type
@@ -37,7 +37,7 @@ export const createReport = async (c) => {
       case ContentType.VIDEO:
         const video = await Video.findById(body.contentId)
         if (!video) {
-          return c.json(createError(404, 'Video not found'), 404)
+          return res.status(404).json(createError(404, 'Video not found'))
         }
         contentName = video.title
         contentThumbnail = video.thumbnail
@@ -54,7 +54,7 @@ export const createReport = async (c) => {
       // Add other cases as needed
       
       default:
-        return c.json(createError(400, 'Content type not supported yet'), 400)
+        return res.status(400).json(createError(400, 'Content type not supported yet'))
     }
     
     // Create report object
@@ -79,14 +79,14 @@ export const createReport = async (c) => {
     const report = new Report(reportData)
     await report.save()
     
-    return c.json({
+    return res.status(201).json({
       success: true,
       message: 'Report submitted successfully',
       report
-    }, 201)
+    })
   } catch (error) {
     console.error('Error creating report:', error)
-    return c.json(createError(500, 'Error creating report'), 500)
+    return res.status(500).json(createError(500, 'Error creating report'))
   }
 }
 

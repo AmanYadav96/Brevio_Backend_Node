@@ -1,11 +1,11 @@
 import Channel from "../models/channel.model.js"
 import { AppError } from "../utils/app-error.js"
 
-export const createChannel = async (c) => {
+export const createChannel = async (req, res) => {
   try {
-    const uploads = c.get('uploads')
-    const body = c.get('body') // Get the body from context instead of parsing it again
-    const user = c.get('user') // Get the authenticated user
+    const uploads = req.uploads
+    const body = req.body // Get the body from request
+    const user = req.user // Get the authenticated user
 
     if (uploads.thumbnail) {
       body.thumbnail = uploads.thumbnail
@@ -19,27 +19,27 @@ export const createChannel = async (c) => {
     }
 
     const channel = await Channel.create(body)
-    return c.json({ success: true, channel }, 201)
+    return res.status(201).json({ success: true, channel })
   } catch (error) {
     if (error.code === 11000) {
-      return c.json({ 
+      return res.status(400).json({ 
         success: false, 
         message: `Channel with name "${error.keyValue.name}" already exists` 
-      }, 400)
+      })
     }
     console.error("Create channel error:", error)
-    return c.json({ success: false, message: "Failed to create channel: " + error.message }, 500)
+    return res.status(500).json({ success: false, message: "Failed to create channel: " + error.message })
   }
 }
 
 // Remove index creation from here
-export const getChannelDashboard = async (c) => {
+export const getChannelDashboard = async (req, res) => {
   try {
-    const page = parseInt(c.req.query('page')) || 1
+    const page = parseInt(req.query.page) || 1
     const limit = 5
     const skip = (page - 1) * limit
-    const search = c.req.query('search') || ''
-    const status = c.req.query('status')
+    const search = req.query.search || ''
+    const status = req.query.status
 
     // Build query
     const query = { isActive: true }
@@ -75,7 +75,7 @@ export const getChannelDashboard = async (c) => {
       Channel.countDocuments(query)
     ])
 
-    return c.json({
+    return res.json({
       success: true,
       stats: stats[0] || {
         totalChannels: 0,
@@ -95,18 +95,16 @@ export const getChannelDashboard = async (c) => {
     })
   } catch (error) {
     console.error("Dashboard error:", error)
-    return c.json({ success: false, message: "Failed to fetch dashboard data" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to fetch dashboard data" })
   }
 }
 
-export const getAllChannels = async (c) => {
+export const getAllChannels = async (req, res) => {
   try {
-    const [page, search, status, type] = await Promise.all([
-      parseInt(c.req.query('page')) || 1,
-      c.req.query('search') || '',
-      c.req.query('status'),
-      c.req.query('type')
-    ])
+    const page = parseInt(req.query.page) || 1
+    const search = req.query.search || ''
+    const status = req.query.status
+    const type = req.query.type
 
     const limit = 5
     const skip = (page - 1) * limit
@@ -131,7 +129,7 @@ export const getAllChannels = async (c) => {
       Channel.countDocuments(query)
     ])
 
-    return c.json({
+    return res.json({
       success: true,
       channels,
       pagination: {
@@ -143,69 +141,69 @@ export const getAllChannels = async (c) => {
     })
   } catch (error) {
     console.error("Get channels error:", error)
-    return c.json({ success: false, message: "Failed to fetch channels" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to fetch channels" })
   }
 }
 
-export const getChannel = async (c) => {
+export const getChannel = async (req, res) => {
   try {
-    const channel = await Channel.findById(c.req.param("id"))
+    const channel = await Channel.findById(req.params.id)
       .select('name thumbnail status type price owner createdAt updatedAt')
       .lean()
 
     if (!channel || !channel.isActive) {
-      return c.json({ success: false, message: "Channel not found" }, 404)
+      return res.status(404).json({ success: false, message: "Channel not found" })
     }
-    return c.json({ success: true, channel })
+    return res.json({ success: true, channel })
   } catch (error) {
     console.error("Get channel error:", error)
-    return c.json({ success: false, message: "Failed to fetch channel" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to fetch channel" })
   }
 }
 
-export const updateChannel = async (c) => {
+export const updateChannel = async (req, res) => {
   try {
-    const body = await c.req.json()
+    const body = req.body
     const channel = await Channel.findByIdAndUpdate(
-      c.req.param("id"),
+      req.params.id,
       { $set: body },
       { new: true, runValidators: true }
     )
     if (!channel) {
-      return c.json({ success: false, message: "Channel not found" }, 404)
+      return res.status(404).json({ success: false, message: "Channel not found" })
     }
-    return c.json({ success: true, channel })
+    return res.json({ success: true, channel })
   } catch (error) {
     console.error("Update channel error:", error)
-    return c.json({ success: false, message: "Failed to update channel" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to update channel" })
   }
 }
 
-export const deleteChannel = async (c) => {
+export const deleteChannel = async (req, res) => {
   try {
     const channel = await Channel.findByIdAndUpdate(
-      c.req.param("id"),
+      req.params.id,
       { isActive: false },
       { new: true }
     )
     if (!channel) {
-      return c.json({ success: false, message: "Channel not found" }, 404)
+      return res.status(404).json({ success: false, message: "Channel not found" })
     }
-    return c.json({ success: true, message: "Channel deleted successfully" })
+    return res.json({ success: true, message: "Channel deleted successfully" })
   } catch (error) {
     console.error("Delete channel error:", error)
-    return c.json({ success: false, message: "Failed to delete channel" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to delete channel" })
   }
 }
 
-export const getChannelStats = async (c) => {
+export const getChannelStats = async (req, res) => {
   try {
-    const channel = await Channel.findById(c.req.param("id"))
+    const channel = await Channel.findById(req.params.id)
     if (!channel) {
-      return c.json({ success: false, message: "Channel not found" }, 404)
+      return res.status(404).json({ success: false, message: "Channel not found" })
     }
     // Add your stats calculation logic here
-    return c.json({ 
+    return res.json({ 
       success: true, 
       stats: {
         totalSubscribers: 0,
@@ -215,6 +213,6 @@ export const getChannelStats = async (c) => {
     })
   } catch (error) {
     console.error("Get channel stats error:", error)
-    return c.json({ success: false, message: "Failed to fetch channel stats" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to fetch channel stats" })
   }
 }

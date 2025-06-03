@@ -1,19 +1,19 @@
-import { Hono } from 'hono';
+import express from 'express';
 import { protect } from '../middlewares/auth.middleware.js';
 import * as adminController from '../controllers/admin.controller.js';
 
-const adminRouter = new Hono();
+const router = express.Router();
 
 // Protect all admin routes
-adminRouter.use('*', protect);
+router.use(protect);
 
 // Dashboard statistics
-adminRouter.get('/creators-stats', adminController.getDashboardStats);
+router.get('/creators-stats', adminController.getDashboardStats);
 
 // Creator management
-adminRouter.get('/creators', adminController.getAllCreators);
-adminRouter.get('/creators/:creatorId', adminController.getCreatorById);
-adminRouter.patch('/creators/:creatorId/block', adminController.toggleCreatorBlock);
-adminRouter.delete('/creators/:creatorId', adminController.deleteCreator);
+router.get('/creators', adminController.getAllCreators);
+router.get('/creators/:creatorId', adminController.getCreatorById);
+router.patch('/creators/:creatorId/block', adminController.toggleCreatorBlock);
+router.delete('/creators/:creatorId', adminController.deleteCreator);
 
-export default adminRouter;
+export default router;

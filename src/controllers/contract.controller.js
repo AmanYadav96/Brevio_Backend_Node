@@ -3,11 +3,11 @@ import User from '../models/user.model.js'
 import { AppError } from '../utils/app-error.js'
 
 // Create a new contract
-export const createContract = async (c) => {
+export const createContract = async (req, res) => {
   try {
-    const adminId = c.get('user')._id
-    const body = c.get('body') || {}
-    const uploads = c.get('uploads') || {}
+    const adminId = req.user._id
+    const body = req.body || {}
+    const uploads = req.uploads || {}
     
     // Validate required fields
     if (!body.title || !body.content || !body.userId || !body.type) {
@@ -98,21 +98,21 @@ export const createContract = async (c) => {
         console.log(`Contract email sent to ${user.email}`);
       } catch (emailError) {
         // Log error but don't fail the request
-        console.error("Error sending contract email:", emailError);
+        console.error('Error sending contract email:', emailError);
       }
     }
     
-    return c.json({
+    return res.status(201).json({
       success: true,
       message: 'Contract created successfully',
       contract
-    }, 201)
+    })
   } catch (error) {
-    console.error('Error creating contract:', error)
-    return c.json({
+    console.error('Create contract error:', error)
+    return res.status(error.statusCode || 500).json({
       success: false,
-      message: error.message || 'Error creating contract'
-    }, error.statusCode || 500)
+      message: error.message || 'Failed to create contract'
+    })
   }
 }
 

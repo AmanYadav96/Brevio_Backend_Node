@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import express from 'express'
 import { 
   createReport,
   getUserReports,
@@ -9,32 +9,32 @@ import {
   getReportsStats
 } from '../controllers/report.controller.js'
 import { protect, restrictTo } from '../middlewares/auth.middleware.js'
-import { handleUpload } from '../middlewares/upload.middleware.js'  // Changed from uploadFiles to handleUpload
+import { handleUpload } from '../middlewares/upload.middleware.js'
 
-const app = new Hono()
+const router = express.Router()
 
 // Apply authentication middleware to all routes
-app.use('*', protect)
+router.use(protect)
 
 // Create a new report (with file upload)
-app.post('/', handleUpload('REPORT'), createReport)  // Updated to use handleUpload
+router.post('/', handleUpload('REPORT'), createReport)
 
 // Get user's reports
-app.get('/user', getUserReports)
+router.get('/user', getUserReports)
 
 // Get all reports (admin only)
-app.get('/', restrictTo('admin'), getAllReports)
+router.get('/', restrictTo('admin'), getAllReports)
 
 // Get report details
-app.get('/:id', getReportDetails)
+router.get('/:id', getReportDetails)
 
 // Update report status (admin only)
-app.patch('/:id', restrictTo('admin'), updateReportStatus)
+router.patch('/:id', restrictTo('admin'), updateReportStatus)
 
 // Get reports by content
-app.get('/content/:contentId/:contentType', restrictTo('admin'), getReportsByContent)
+router.get('/content/:contentId/:contentType', restrictTo('admin'), getReportsByContent)
 
 // Get reports statistics (admin only)
-app.get('/stats/overview', restrictTo('admin'), getReportsStats)
+router.get('/stats/overview', restrictTo('admin'), getReportsStats)
 
-export default app
+export default router

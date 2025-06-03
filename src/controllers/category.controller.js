@@ -3,18 +3,18 @@ import CreatorContent from '../models/creatorContent.model.js'
 import { UserRole } from '../models/user.model.js'
 
 // Create a new category
-export const createCategory = async (c) => {
+export const createCategory = async (req, res) => {
   try {
-    const user = c.get('user')
-    const { name, description, associatedContent, status } = await c.req.json()
+    const user = req.user
+    const { name, description, associatedContent, status } = req.body
     
     // Check if category with same name exists
     const existingCategory = await Category.findOne({ name })
     if (existingCategory) {
-      return c.json({
+      return res.status(400).json({
         success: false,
         message: 'Category with this name already exists'
-      }, 400)
+      })
     }
     
     // Validate associated content IDs
@@ -26,10 +26,10 @@ export const createCategory = async (c) => {
       })
       
       if (validContent !== contentIds.length) {
-        return c.json({
+        return res.status(400).json({
           success: false,
           message: 'One or more content items are invalid or not published'
-        }, 400)
+        })
       }
     }
     
@@ -41,17 +41,17 @@ export const createCategory = async (c) => {
       createdBy: user._id
     })
     
-    return c.json({
+    return res.json({
       success: true,
       message: 'Category created successfully',
       data: category
     })
   } catch (error) {
     console.error('Create category error:', error)
-    return c.json({
+    return res.status(500).json({
       success: false,
-      message: error.message
-    }, 500)
+      message: 'Failed to create category'
+    })
   }
 }
 

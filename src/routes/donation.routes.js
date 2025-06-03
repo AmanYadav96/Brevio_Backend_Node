@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import express from 'express'
 import { 
   createDonation, 
   processDonation, 
@@ -8,24 +8,24 @@ import {
 } from '../controllers/donation.controller.js'
 import { protect } from '../middlewares/auth.middleware.js'
 
-const app = new Hono()
+const router = express.Router()
 
 // Apply authentication middleware to all routes
-app.use('*', protect)
+router.use(protect)
 
 // Create a new donation
-app.post('/', createDonation)
+router.post('/', createDonation)
 
 // Process a donation payment
-app.post('/process', processDonation)
+router.post('/process', processDonation)
 
 // Get user's donations
-app.get('/user', getUserDonations)
+router.get('/user', getUserDonations)
 
 // Get creator's received donations
-app.get('/creator', getCreatorDonations)
+router.get('/creator', getCreatorDonations)
 
 // Get donations for a specific content
-app.get('/content/:contentId/:contentType', getContentDonations)
+router.get('/content/:contentId/:contentType', getContentDonations)
 
-export default app
+export default router

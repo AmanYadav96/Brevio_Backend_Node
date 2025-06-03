@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import express from 'express'
 import { 
   createContract,
   getAllContracts,
@@ -14,23 +14,23 @@ import {
 import { protect, restrictTo } from '../middlewares/auth.middleware.js'
 import { handleUpload } from '../middlewares/upload.middleware.js'
 
-const app = new Hono()
+const router = express.Router()
 
 // Apply authentication middleware to all routes
-app.use('*', protect)
+router.use(protect)
 
 // Admin routes
-app.post('/', restrictTo('admin'), handleUpload('CONTRACT'), createContract)
-app.get('/admin', restrictTo('admin'), getAllContracts)
-app.patch('/:id', restrictTo('admin'), handleUpload('CONTRACT'), updateContract)
-app.post('/:id/send', restrictTo('admin'), sendContract)
-app.post('/:id/sign/admin', restrictTo('admin'), handleUpload('CONTRACT'), signContractByAdmin)
-app.get('/stats', restrictTo('admin'), getContractStats)
+router.post('/', restrictTo('admin'), handleUpload('CONTRACT'), createContract)
+router.get('/admin', restrictTo('admin'), getAllContracts)
+router.patch('/:id', restrictTo('admin'), handleUpload('CONTRACT'), updateContract)
+router.post('/:id/send', restrictTo('admin'), sendContract)
+router.post('/:id/sign/admin', restrictTo('admin'), handleUpload('CONTRACT'), signContractByAdmin)
+router.get('/stats', restrictTo('admin'), getContractStats)
 
 // User routes
-app.get('/user', getUserContracts)
-app.get('/:id', getContractDetails)
-app.post('/:id/sign/user', handleUpload('CONTRACT'), signContractByUser)
-app.post('/:id/reject', rejectContract)
+router.get('/user', getUserContracts)
+router.get('/:id', getContractDetails)
+router.post('/:id/sign/user', handleUpload('CONTRACT'), signContractByUser)
+router.post('/:id/reject', rejectContract)
 
-export default app
+export default router

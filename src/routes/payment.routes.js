@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import express from 'express'
 import { 
   createPayment,
   processStripePayment,
@@ -10,30 +10,30 @@ import {
 } from '../controllers/payment.controller.js'
 import { protect, restrictTo } from '../middlewares/auth.middleware.js'
 
-const app = new Hono()
+const router = express.Router()
 
 // Apply authentication middleware to all routes
-app.use('*', protect)
+router.use(protect)
 
 // Create a new payment
-app.post('/', createPayment)
+router.post('/', createPayment)
 
 // Process a payment with Stripe
-app.post('/process-stripe', processStripePayment)
+router.post('/process-stripe', processStripePayment)
 
 // Get user's payment history
-app.get('/user', getUserPayments)
+router.get('/user', getUserPayments)
 
 // Get creator's received payments
-app.get('/creator', getCreatorPayments)
+router.get('/creator', getCreatorPayments)
 
 // Process creator payout (admin only)
-app.post('/creator-payout', restrictTo('admin'), processCreatorPayout)
+router.post('/creator-payout', restrictTo('admin'), processCreatorPayout)
 
 // Get payment details
-app.get('/:id', getPaymentDetails)
+router.get('/:id', getPaymentDetails)
 
 // Process refund
-app.post('/refund', restrictTo('admin'), processRefund)
+router.post('/refund', restrictTo('admin'), processRefund)
 
-export default app
+export default router

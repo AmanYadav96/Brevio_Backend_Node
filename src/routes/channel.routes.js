@@ -1,4 +1,4 @@
-import { Hono } from "hono"
+import express from "express"
 import { protect, restrictTo } from "../middlewares/auth.middleware.js"
 import { UserRole } from "../models/user.model.js"
 import { 
@@ -10,9 +10,9 @@ import {
   getChannelStats,
   getChannelDashboard
 } from "../controllers/channel.controller.js"
-import { handleUpload, uploadTypes } from '../middlewares/upload.middleware.js'
+import { handleUpload } from '../middlewares/upload.middleware.js'
 
-const router = new Hono()
+const router = express.Router()
 
 // Dashboard route (must be before /:id routes)
 router.get("/dashboard", protect, restrictTo(UserRole.ADMIN), getChannelDashboard)

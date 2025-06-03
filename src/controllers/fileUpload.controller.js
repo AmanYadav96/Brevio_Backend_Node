@@ -2,9 +2,9 @@ import FileUpload from '../models/fileUpload.model.js'
 import mongoose from 'mongoose'
 
 // Get upload statistics
-export const getUploadStats = async (c) => {
+export const getUploadStats = async (req, res) => {
   try {
-    const userId = c.get('user')._id
+    const userId = req.user._id
     
     // Get total uploads by user
     const totalUploads = await FileUpload.countDocuments({ userId })
@@ -37,7 +37,7 @@ export const getUploadStats = async (c) => {
       }}
     ])
     
-    return c.json({
+    return res.json({
       success: true,
       stats: {
         totalUploads,
@@ -48,15 +48,15 @@ export const getUploadStats = async (c) => {
       }
     })
   } catch (error) {
-    return c.json({ success: false, message: error.message }, 500)
+    return res.status(500).json({ success: false, message: error.message })
   }
 }
 
 // Get recent uploads
-export const getRecentUploads = async (c) => {
+export const getRecentUploads = async (req, res) => {
   try {
-    const userId = c.get('user')._id
-    const { page = 1, limit = 10 } = c.req.query()
+    const userId = req.user._id
+    const { page = 1, limit = 10 } = req.query
     
     const skip = (page - 1) * limit
     
@@ -68,7 +68,7 @@ export const getRecentUploads = async (c) => {
       FileUpload.countDocuments({ userId })
     ])
     
-    return c.json({
+    return res.json({
       success: true,
       uploads,
       pagination: {
@@ -79,12 +79,12 @@ export const getRecentUploads = async (c) => {
       }
     })
   } catch (error) {
-    return c.json({ success: false, message: error.message }, 500)
+    return res.status(500).json({ success: false, message: error.message })
   }
 }
 
 // Get admin storage statistics
-export const getAdminStorageStats = async (c) => {
+export const getAdminStorageStats = async (req, res) => {
   try {
     // Get total size of all uploads
     const sizeAggregate = await FileUpload.aggregate([
@@ -99,26 +99,18 @@ export const getAdminStorageStats = async (c) => {
         _id: "$userId", 
         count: { $sum: 1 },
         totalSize: { $sum: "$fileSize" }
-      }},
-      { $sort: { totalSize: -1 } },
-      { $limit: 10 }
+      }}
     ])
     
-    // Populate user details
-    const populatedUserStats = await FileUpload.populate(userStats, {
-      path: '_id',
-      select: 'name email'
-    })
-    
-    return c.json({
+    return res.json({
       success: true,
       stats: {
         totalSize,
         sizeInGB: Math.round(totalSize / (1024 * 1024 * 1024) * 100) / 100,
-        topUsers: populatedUserStats
+        byUser: userStats
       }
     })
   } catch (error) {
-    return c.json({ success: false, message: error.message }, 500)
+    return res.status(500).json({ success: false, message: error.message })
   }
 }

@@ -5,21 +5,21 @@ import Subscription from '../models/subscription.model.js'
 import CreatorContent from '../models/creatorContent.model.js'
 
 // Subscribe a user to a channel
-export const subscribeToChannel = async (c) => {
+export const subscribeToChannel = async (req, res) => {
   try {
-    const { channelId, subscriptionId } = c.req.json()
-    const userId = c.get('user')._id
+    const { channelId, subscriptionId } = req.body
+    const userId = req.user._id
 
     // Check if channel exists
     const channel = await Channel.findById(channelId)
     if (!channel) {
-      return c.json({ success: false, message: 'Channel not found' }, 404)
+      return res.status(404).json({ success: false, message: 'Channel not found' })
     }
 
     // Check if subscription plan exists
     const subscription = await Subscription.findById(subscriptionId)
     if (!subscription) {
-      return c.json({ success: false, message: 'Subscription plan not found' }, 404)
+      return res.status(404).json({ success: false, message: 'Subscription plan not found' })
     }
 
     // Check if user is already subscribed to this channel
@@ -29,10 +29,10 @@ export const subscribeToChannel = async (c) => {
     })
 
     if (existingSubscription && existingSubscription.isActive) {
-      return c.json({ 
+      return res.status(400).json({ 
         success: false, 
         message: 'You are already subscribed to this channel' 
-      }, 400)
+      })
     }
 
     // Calculate end date based on subscription duration
@@ -87,18 +87,18 @@ export const subscribeToChannel = async (c) => {
       })
     }
 
-    return c.json({
+    return res.json({
       success: true,
       message: 'Successfully subscribed to channel',
       data: channelSubscription
     })
   } catch (error) {
     console.error('Error subscribing to channel:', error)
-    return c.json({ 
+    return res.status(500).json({ 
       success: false, 
       message: 'Failed to subscribe to channel', 
       error: error.message 
-    }, 500)
+    })
   }
 }
 

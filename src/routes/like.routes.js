@@ -1,15 +1,15 @@
-import { Hono } from 'hono'
+import express from 'express'
 import { toggleLike, getLikes, getUserLikes } from '../controllers/like.controller.js'
 import { protect } from '../middlewares/auth.middleware.js'
 
-const app = new Hono()
+const router = express.Router()
 
 // Public routes
-app.get('/', getLikes)
+router.get('/', getLikes)
 
 // Protected routes
-app.use('*', protect)
-app.post('/toggle', toggleLike)
-app.get('/user', getUserLikes)
+router.use(protect)
+router.post('/toggle', toggleLike)
+router.get('/user', getUserLikes)
 
-export default app
+export default router

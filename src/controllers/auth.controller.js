@@ -1,41 +1,38 @@
-import { sign } from "hono/jwt"
+import jwt from 'jsonwebtoken';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithCredential,
   FacebookAuthProvider,
-} from "firebase/auth"
-// Change the import to match the export
-import { auth } from "../config/firebase.js"
-import User, { UserRole } from "../models/user.model.js"
-import { createStripeCustomer } from "../services/stripe.service.js"
-import { AppError } from "../utils/app-error.js"
-import authService from "../services/auth.service.js"
+} from "firebase/auth";
+import { auth } from "../config/firebase.js";
+import User, { UserRole } from "../models/user.model.js";
+import { createStripeCustomer } from "../services/stripe.service.js";
+import { AppError } from "../utils/app-error.js";
+import authService from "../services/auth.service.js";
 
-
-
-export const googleLogin = async (c) => {
+export const googleLogin = async (req, res) => {
   try {
-    const { idToken } = await c.req.json()
+    const { idToken } = req.body;
     
     if (!idToken) {
-      return c.json({ success: false, message: "ID token is required" }, 400)
+      return res.status(400).json({ success: false, message: "ID token is required" });
     }
 
     // Create Google credential
-    const credential = GoogleAuthProvider.credential(idToken)
+    const credential = GoogleAuthProvider.credential(idToken);
 
     // Sign in with credential - this verifies the token with Firebase
-    const result = await signInWithCredential(auth, credential)
-    const firebaseUser = result.user
+    const result = await signInWithCredential(auth, credential);
+    const firebaseUser = result.user;
 
     // Check if user exists in our database
-    let user = await User.findOne({ email: firebaseUser.email })
+    let user = await User.findOne({ email: firebaseUser.email });
 
     if (!user) {
       // Create Stripe customer
-      const stripeCustomer = await createStripeCustomer(firebaseUser.email, firebaseUser.displayName || "Google User")
+      const stripeCustomer = await createStripeCustomer(firebaseUser.email, firebaseUser.displayName || "Google User");
 
       // Create new user
       user = await User.create({
@@ -45,44 +42,48 @@ export const googleLogin = async (c) => {
         profilePicture: firebaseUser.photoURL || "",
         isEmailVerified: firebaseUser.emailVerified,
         stripeCustomerId: stripeCustomer.id,
-      })
+      });
     } else {
       // Update Firebase UID if not already set
       if (!user.firebaseUid) {
-        user.firebaseUid = firebaseUser.uid
-        await user.save()
+        user.firebaseUid = firebaseUser.uid;
+        await user.save();
       }
     }
 
     // Generate JWT token
-    const token = await sign({ id: user._id }, process.env.JWT_SECRET)
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
 
-    return c.json({
+    return res.json({
       success: true,
       token,
       user: {
-        id: user._id,
+        _id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
         profilePicture: user.profilePicture,
-      },
-    })
+        isEmailVerified: user.isEmailVerified
+      }
+    });
   } catch (error) {
-    console.error("Google login error:", error)
-    if (error.code === 'auth/invalid-credential') {
-      return c.json({ success: false, message: "Invalid Google token" }, 401)
-    }
-    return c.json({ success: false, message: "Google login failed" }, 500)
+    console.error("Google login error:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message || "Google login failed" 
+    });
   }
-}
-
-export const facebookLogin = async (c) => {
+};
+export const facebookLogin = async (req, res) => {
   try {
-    const { accessToken } = await c.req.json()
+    const { accessToken } = req.body
     
     if (!accessToken) {
-      return c.json({ success: false, message: "Access token is required" }, 400)
+      return res.status(400).json({ success: false, message: "Access token is required" })
     }
 
     // Create Facebook credential
@@ -119,7 +120,7 @@ export const facebookLogin = async (c) => {
     // Generate JWT token
     const token = await sign({ id: user._id }, process.env.JWT_SECRET)
 
-    return c.json({
+    return res.json({
       success: true,
       token,
       user: {
@@ -133,23 +134,23 @@ export const facebookLogin = async (c) => {
   } catch (error) {
     console.error("Facebook login error:", error)
     if (error.code === 'auth/invalid-credential') {
-      return c.json({ success: false, message: "Invalid Facebook token" }, 401)
+      return res.status(401).json({ success: false, message: "Invalid Facebook token" })
     }
-    return c.json({ success: false, message: "Facebook login failed" }, 500)
+    return res.status(500).json({ success: false, message: "Facebook login failed" })
   }
 }
 
-export const becomeCreator = async (c) => {
+export const becomeCreator = async (req, res) => {
   try {
-    const userId = c.get("userId")
-    const { username } = await c.req.json()
+    const userId = req.user._id
+    const { username } = req.body
 
     // Validate username
     if (!username) {
-      return c.json({
+      return res.status(400).json({
         success: false,
         message: "Username is required to become a creator"
-      }, 400)
+      })
     }
 
     // Check if username is already taken
@@ -159,10 +160,10 @@ export const becomeCreator = async (c) => {
     })
     
     if (existingUsername) {
-      return c.json({
+      return res.status(400).json({
         success: false,
         message: "Username is already taken"
-      }, 400)
+      })
     }
 
     // Find user
@@ -176,7 +177,7 @@ export const becomeCreator = async (c) => {
     user.role = UserRole.CREATOR
     await user.save()
 
-    return c.json({
+    return res.json({
       success: true,
       message: "Successfully upgraded to creator account",
       user: {
@@ -190,68 +191,68 @@ export const becomeCreator = async (c) => {
     })
   } catch (error) {
     if (error instanceof AppError) {
-      return c.json({ success: false, message: error.message }, error.statusCode)
+      return res.status(error.statusCode).json({ success: false, message: error.message })
     }
     console.error("Become creator error:", error)
-    return c.json({ success: false, message: "Failed to become a creator" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to become a creator" })
   }
 }
 
 // Register with email and password
-export const register = async (c) => {
+export const register = async (req, res) => {
   try {
-    const body = await c.req.json()
+    const body = req.body
     const { user, token } = await authService.registerWithEmail(body)
     
-    return c.json({
+    return res.json({
       success: true,
       token,
       user
     })
   } catch (error) {
-    return c.json({
+    return res.status(400).json({
       success: false,
       message: error.message
-    }, 400)
+    })
   }
 }
 
 // Login with email and password
-export const login = async (c) => {
+export const login = async (req, res) => {
   try {
-    const { email, password } = await c.req.json()
+    const { email, password } = req.body
     const { user, token } = await authService.loginWithEmail(email, password)
     
-    return c.json({
+    return res.json({
       success: true,
       token,
       user
     })
   } catch (error) {
-    return c.json({
+    return res.status(401).json({
       success: false,
       message: error.message
-    }, 401)
+    })
   }
 }
 
 // Google authentication
-export const googleAuthCreator = async (c) => {
+export const googleAuthCreator = async (req, res) => {
   try {
-    const { idToken, username } = await c.req.json()
+    const { idToken, username } = req.body
     
     if (!idToken) {
-      return c.json({ success: false, message: "ID token is required" }, 400)
+      return res.status(400).json({ success: false, message: "ID token is required" })
     }
     
     if (!username) {
-      return c.json({ success: false, message: "Username is required for creators" }, 400)
+      return res.status(400).json({ success: false, message: "Username is required for creators" })
     }
     
     // Check if username is already taken
     const existingUser = await User.findOne({ username })
     if (existingUser) {
-      return c.json({ success: false, message: "Username is already taken" }, 400)
+      return res.status(400).json({ success: false, message: "Username is already taken" })
     }
     
     // Use the existing googleAuth but add username
@@ -284,32 +285,32 @@ export const googleAuthCreator = async (c) => {
     
     const token = await sign({ id: user._id }, process.env.JWT_SECRET)
     
-    return c.json({
+    return res.json({
       success: true,
       token,
       user
     })
   } catch (error) {
     console.error("Google auth creator error:", error)
-    return c.json({
+    return res.status(400).json({
       success: false,
       message: error.message || "Google authentication failed"
-    }, 400)
+    })
   }
 }
 
 // Facebook authentication
-export const facebookAuth = async (c) => {
+export const facebookAuth = async (req, res) => {
   try {
-    const { accessToken } = await c.req.json()
+    const { accessToken } = req.body
     
     if (!accessToken) {
-      return c.json({ success: false, message: "Access token is required" }, 400)
+      return res.status(400).json({ success: false, message: "Access token is required" })
     }
     
     const { user, token } = await authService.facebookAuth(accessToken)
     
-    return c.json({
+    return res.json({
       success: true,
       token,
       user
@@ -317,27 +318,27 @@ export const facebookAuth = async (c) => {
   } catch (error) {
     console.error("Facebook auth error:", error)
     if (error.code === 'auth/invalid-credential') {
-      return c.json({ success: false, message: "Invalid Facebook token" }, 401)
+      return res.status(401).json({ success: false, message: "Invalid Facebook token" })
     }
-    return c.json({
+    return res.status(400).json({
       success: false,
       message: error.message || "Facebook authentication failed"
-    }, 400)
+    })
   }
 }
 
 // Apple authentication
-export const appleAuth = async (c) => {
+export const appleAuth = async (req, res) => {
   try {
-    const { idToken, userData } = await c.req.json()
+    const { idToken, userData } = req.body
     
     if (!idToken) {
-      return c.json({ success: false, message: "ID token is required" }, 400)
+      return res.status(400).json({ success: false, message: "ID token is required" })
     }
     
     const { user, token } = await authService.appleAuth(idToken, userData || {})
     
-    return c.json({
+    return res.json({
       success: true,
       token,
       user
@@ -345,11 +346,11 @@ export const appleAuth = async (c) => {
   } catch (error) {
     console.error("Apple auth error:", error)
     if (error.code === 'auth/invalid-credential') {
-      return c.json({ success: false, message: "Invalid Apple token" }, 401)
+      return res.status(401).json({ success: false, message: "Invalid Apple token" })
     }
-    return c.json({
+    return res.status(400).json({
       success: false,
       message: error.message || "Apple authentication failed"
-    }, 400)
+    })
   }
 }

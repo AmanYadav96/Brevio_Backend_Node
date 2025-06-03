@@ -123,14 +123,14 @@ export const uploadTypes = {
  * @returns {Function} Middleware function
  */
 export const handleUpload = (type) => {
-  return async (c, next) => {
+  return async (req, res, next) => {
     try {
-      const contentType = c.req.header('Content-Type') || '';
-      console.log('Request path:', c.req.path);
+      const contentType = req.headers['content-type'] || '';
+      console.log('Request path:', req.path);
       console.log('Content-Type:', contentType);
       
-      // Get user from context
-      const user = c.get('user');
+      // Get user from request (set by auth middleware)
+      const user = req.user;
       
       // Get upload configuration based on type
       const uploadConfig = uploadTypes[type];
@@ -141,7 +141,7 @@ export const handleUpload = (type) => {
       const body = {};
       
       // Check for chunked upload action
-      const url = new URL(c.req.url, 'http://localhost');
+      const url = new URL(req.url, `http://${req.headers.host}`);
       const action = url.searchParams.get('action');
       const chunkIndex = url.searchParams.get('chunkIndex');
       const totalChunks = url.searchParams.get('totalChunks');
@@ -153,38 +153,38 @@ export const handleUpload = (type) => {
         
         switch (action) {
           case 'initialize':
-            result = await initializeChunkedUpload(c, uploadConfig);
-            return c.json(result);
+            result = await initializeChunkedUpload(req, uploadConfig, user);
+            return res.json(result);
             
           case 'upload':
             if (!fileId || chunkIndex === null) {
-              return c.json({
+              return res.status(400).json({
                 success: false,
                 message: 'Missing fileId or chunkIndex'
-              }, 400);
+              });
             }
-            result = await handleChunkUpload(c, fileId, parseInt(chunkIndex), parseInt(totalChunks));
-            return c.json(result);
+            result = await handleChunkUpload(req, fileId, parseInt(chunkIndex), parseInt(totalChunks));
+            return res.json(result);
             
           case 'complete':
             if (!fileId) {
-              return c.json({
+              return res.status(400).json({
                 success: false,
                 message: 'Missing fileId'
-              }, 400);
+              });
             }
-            result = await completeChunkedUpload(c, fileId);
-            return c.json(result);
+            result = await completeChunkedUpload(req, fileId);
+            return res.json(result);
             
           case 'abort':
             if (!fileId) {
-              return c.json({
+              return res.status(400).json({
                 success: false,
                 message: 'Missing fileId'
-              }, 400);
+              });
             }
-            result = await abortChunkedUpload(c, fileId);
-            return c.json(result);
+            result = await abortChunkedUpload(req, fileId);
+            return res.json(result);
         }
       }
       
@@ -202,10 +202,9 @@ export const handleUpload = (type) => {
             maxFieldsSize: 1 * 1024 * 1024, // 1MB for text fields
           });
           
-          // Parse the form using the raw Node.js request object
+          // Parse the form using the Express request object
           const [fields, files] = await new Promise((resolve, reject) => {
-            // Use c.req.raw to get the Node.js native request object
-            form.parse(c.req.raw, (err, fields, files) => {
+            form.parse(req, (err, fields, files) => {
               if (err) return reject(err);
               resolve([fields, files]);
             });
@@ -415,35 +414,28 @@ export const handleUpload = (type) => {
           
           console.log('Final uploads object:', uploads);
           
+          // Add uploads and body to request object instead of context
+          req.uploads = uploads;
+          req.body = { ...req.body, ...body };
+          
+          return next();
         } catch (parseError) {
           console.error('Error parsing form data:', parseError);
-          return c.json({ 
+          return res.status(400).json({ 
             success: false, 
             message: `Error parsing form data: ${parseError.message}` 
-          }, 400);
+          });
         }
       } else {
         console.log('Not a multipart/form-data request, skipping file processing');
-        // For non-multipart requests, try to parse as JSON
-        try {
-          const jsonBody = await c.req.json();
-          Object.assign(body, jsonBody);
-        } catch (error) {
-          console.log('Not a JSON request either, continuing');
-        }
+        return next();
       }
-      
-      // Add uploads and body to context
-      c.set('uploads', uploads);
-      c.set('body', body);
-      
-      return next();
     } catch (error) {
       console.error('Upload error:', error);
-      return c.json({ 
+      return res.status(500).json({ 
         success: false, 
         message: `Upload failed: ${error.message}` 
-      }, 500);
+      });
     }
   };
 };
@@ -454,9 +446,8 @@ export const handleUpload = (type) => {
  * @param {Object} uploadConfig - Upload configuration
  * @returns {Object} Initialization result
  */
-async function initializeChunkedUpload(c, uploadConfig) {
+async function initializeChunkedUpload(req, uploadConfig, user) {
   try {
-    const user = c.get('user');
     const form = formidable({
       maxFileSize: 10 * 1024 * 1024, // Just for metadata, not the actual file
       multiples: false,
@@ -466,7 +457,7 @@ async function initializeChunkedUpload(c, uploadConfig) {
     
     // Parse the form
     const [fields] = await new Promise((resolve, reject) => {
-      form.parse(c.req.raw, (err, fields) => {
+      form.parse(req, (err, fields) => {
         if (err) return reject(err);
         resolve([fields]);
       });
@@ -573,7 +564,7 @@ async function initializeChunkedUpload(c, uploadConfig) {
  * @param {number} totalChunks - Total number of chunks
  * @returns {Object} Chunk upload result
  */
-async function handleChunkUpload(c, fileId, chunkIndex, totalChunks) {
+async function handleChunkUpload(req, fileId, chunkIndex, totalChunks) {
   try {
     // Find the file upload record
     const fileUpload = await FileUpload.findById(fileId);
@@ -601,7 +592,7 @@ async function handleChunkUpload(c, fileId, chunkIndex, totalChunks) {
     });
     
     const [_, files] = await new Promise((resolve, reject) => {
-      form.parse(c.req.raw, (err, fields, files) => {
+      form.parse(req, (err, fields, files) => {
         if (err) return reject(err);
         resolve([fields, files]);
       });
@@ -683,7 +674,7 @@ async function handleChunkUpload(c, fileId, chunkIndex, totalChunks) {
  * @param {string} fileId - File ID
  * @returns {Object} Completion result
  */
-async function completeChunkedUpload(c, fileId) {
+async function completeChunkedUpload(req, fileId) {
   try {
     // Find the file upload record
     const fileUpload = await FileUpload.findById(fileId);
@@ -708,7 +699,7 @@ async function completeChunkedUpload(c, fileId) {
     });
     
     const [fields] = await new Promise((resolve, reject) => {
-      form.parse(c.req.raw, (err, fields) => {
+      form.parse(req, (err, fields) => {
         if (err) return reject(err);
         resolve([fields]);
       });
@@ -798,7 +789,7 @@ async function completeChunkedUpload(c, fileId) {
  * @param {string} fileId - File ID
  * @returns {Object} Abort result
  */
-async function abortChunkedUpload(c, fileId) {
+async function abortChunkedUpload(req, fileId) {
   try {
     // Find the file upload record
     const fileUpload = await FileUpload.findById(fileId);
@@ -849,19 +840,19 @@ async function abortChunkedUpload(c, fileId) {
 }
 
 // Export the getMultipleUploadProgress function
-export const getMultipleUploadProgress = async (c) => {
+export const getMultipleUploadProgress = async (req, res) => {
   try {
-    const { fileIds } = await c.req.json();
+    const { fileIds } = req.body;
     
-    if (!fileIds.length) {
-      return c.json({ success: false, message: 'No file IDs provided' }, 400);
+    if (!fileIds || !fileIds.length) {
+      return res.status(400).json({ success: false, message: 'No file IDs provided' });
     }
     
     const fileUploads = await FileUpload.find({
       _id: { $in: fileIds }
     }).select('status progress error url fileName fileSize field');
     
-    return c.json({
+    return res.json({
       success: true,
       uploads: fileUploads.map(upload => ({
         _id: upload._id,
@@ -875,46 +866,74 @@ export const getMultipleUploadProgress = async (c) => {
       }))
     });
   } catch (error) {
-    return c.json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to get upload progress: ' + error.message
-    }, 500);
+    });
   }
 };
 
 // Optional upload middleware for profile pictures and other optional files
-export const optionalUpload = async (c, next) => {
-  const contentType = c.req.header('Content-Type') || '';
+export const optionalUpload = async (req, res, next) => {
+  const contentType = req.headers['content-type'] || '';
   
   if (contentType.includes('multipart/form-data')) {
     try {
-      let formData;
-      try {
-        formData = await c.req.formData();
-      } catch (error) {
-        console.error('FormData parsing error in optionalUpload:', error);
-        return next();
-      }
+      // Use formidable for parsing
+      const form = formidable({
+        maxFileSize: maxFileSize.image,
+        multiples: true,
+        keepExtensions: true,
+        uploadDir: tempDir
+      });
+      
+      const [fields, files] = await new Promise((resolve, reject) => {
+        form.parse(req, (err, fields, files) => {
+          if (err) return reject(err);
+          resolve([fields, files]);
+        });
+      });
       
       const uploads = {};
       const body = {};
       
-      for (const [key, value] of formData.entries()) {
-        if (value instanceof Blob) {
+      // Process fields
+      for (const [key, value] of Object.entries(fields)) {
+        // Try to parse as JSON if possible
+        if (typeof value === 'string' && 
+            ((value.startsWith('{') && value.endsWith('}')) || 
+            (value.startsWith('[') && value.endsWith(']')))) {
+          try {
+            body[key] = JSON.parse(value);
+          } catch (jsonError) {
+            body[key] = value;
+          }
+        } else {
+          body[key] = value;
+        }
+      }
+      
+      // Process files
+      for (const [key, fileInfo] of Object.entries(files)) {
+        const file = Array.isArray(fileInfo) ? fileInfo[0] : fileInfo;
+        
+        if (!file) continue;
+        
+        if (key === 'profilePicture') {
           // Handle file uploads
           if (key === 'profilePicture') {
             if (!allowedImageTypes.includes(value.type)) {
-              return c.json({ 
+              return res.status(400).json({ 
                 success: false, 
                 message: 'Invalid image type. Allowed types: ' + allowedImageTypes.join(', ') 
-              }, 400);
+              });
             }
             
             if (value.size > maxFileSize.image) {
-              return c.json({ 
+              return res.status(400).json({ 
                 success: false, 
                 message: `File too large. Maximum size: ${(maxFileSize.image / (1024 * 1024))}MB` 
-              }, 400);
+              });
             }
             
             try {
@@ -943,10 +962,10 @@ export const optionalUpload = async (c, next) => {
               uploads[key] = `${R2_PUBLIC_URL}/${fileName}`;
             } catch (error) {
               console.error('Error uploading profile picture:', error);
-              return c.json({ 
+              return res.status(500).json({ 
                 success: false, 
                 message: 'Profile picture upload failed: ' + error.message 
-              }, 500);
+              });
             }
           } else {
             // Handle other file types
@@ -976,10 +995,10 @@ export const optionalUpload = async (c, next) => {
               uploads[key] = `${R2_PUBLIC_URL}/${fileName}`;
             } catch (error) {
               console.error(`Error uploading ${key}:`, error);
-              return c.json({ 
+              return res.status(500).json({ 
                 success: false, 
                 message: `${key} upload failed: ` + error.message 
-              }, 500);
+              });
             }
           }
         } else {
@@ -1003,9 +1022,9 @@ export const optionalUpload = async (c, next) => {
         }
       }
       
-      // Add uploads and body to context
-      c.set('uploads', uploads);
-      c.set('body', body);
+      // Add uploads and body to request
+      req.uploads = uploads;
+      req.body = { ...req.body, ...body };
       
       return next();
     } catch (error) {

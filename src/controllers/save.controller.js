@@ -2,10 +2,10 @@ import Save from '../models/save.model.js'
 import { AppError } from '../utils/app-error.js'
 
 // Toggle save (save or unsave)
-export const toggleSave = async (c) => {
+export const toggleSave = async (req, res) => {
   try {
-    const userId = c.get('user')._id
-    const { contentType, contentId, folder = 'default' } = await c.req.json()
+    const userId = req.user._id
+    const { contentType, contentId, folder = 'default' } = req.body
     
     // Validate content type
     if (!['content', 'creatorContent'].includes(contentType)) {
@@ -23,7 +23,7 @@ export const toggleSave = async (c) => {
       // Unsave: Remove the save
       await Save.findByIdAndDelete(existingSave._id)
       
-      return c.json({
+      return res.json({
         success: true,
         message: 'Content unsaved successfully',
         saved: false
@@ -39,7 +39,7 @@ export const toggleSave = async (c) => {
       
       await newSave.save()
       
-      return c.json({
+      return res.json({
         success: true,
         message: 'Content saved successfully',
         saved: true
@@ -47,18 +47,18 @@ export const toggleSave = async (c) => {
     }
   } catch (error) {
     console.error('Toggle save error:', error)
-    return c.json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message || 'Failed to toggle save'
-    }, error.statusCode || 500)
+    })
   }
 }
 
 // Check if content is saved
-export const checkSaved = async (c) => {
+export const checkSaved = async (req, res) => {
   try {
-    const userId = c.get('user')._id
-    const { contentType, contentId } = c.req.query()
+    const userId = req.user._id
+    const { contentType, contentId } = req.query
     
     // Validate content type
     if (!['content', 'creatorContent'].includes(contentType)) {
@@ -72,25 +72,25 @@ export const checkSaved = async (c) => {
       contentId
     })
     
-    return c.json({
+    return res.json({
       success: true,
       saved: !!save,
       folder: save ? save.folder : null
     })
   } catch (error) {
     console.error('Check saved error:', error)
-    return c.json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message || 'Failed to check saved status'
-    }, error.statusCode || 500)
+    })
   }
 }
 
 // Get user's saved content
-export const getSavedContent = async (c) => {
+export const getSavedContent = async (req, res) => {
   try {
-    const userId = c.get('user')._id
-    const { contentType, folder, page = 1, limit = 10 } = c.req.query()
+    const userId = req.user._id
+    const { contentType, folder, page = 1, limit = 10 } = req.query
     
     // Build query
     const query = { user: userId }
@@ -106,37 +106,39 @@ export const getSavedContent = async (c) => {
       query.folder = folder
     }
     
+    // Pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit)
+    
     // Get saved content with pagination
-    const savedContent = await Save.find(query)
-      .sort({ createdAt: -1 })
-      .skip((parseInt(page) - 1) * parseInt(limit))
-      .limit(parseInt(limit))
-      .populate({
-        path: 'contentId',
-        select: 'title description thumbnail duration'
-      })
+    const [saves, total] = await Promise.all([
+      Save.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .populate({
+          path: 'contentId',
+          select: 'title thumbnail description views duration createdAt',
+          model: contentType === 'content' ? 'Content' : 'CreatorContent'
+        }),
+      Save.countDocuments(query)
+    ])
     
-    const total = await Save.countDocuments(query)
-    
-    // Get user's folders
-    const folders = await Save.distinct('folder', { user: userId })
-    
-    return c.json({
+    return res.json({
       success: true,
-      savedContent,
-      folders,
+      saves,
       pagination: {
         total,
+        pages: Math.ceil(total / parseInt(limit)),
         page: parseInt(page),
-        pages: Math.ceil(total / parseInt(limit))
+        limit: parseInt(limit)
       }
     })
   } catch (error) {
     console.error('Get saved content error:', error)
-    return c.json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message || 'Failed to get saved content'
-    }, error.statusCode || 500)
+    })
   }
 }
 

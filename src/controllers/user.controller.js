@@ -2,7 +2,7 @@ import User from "../models/user.model.js"
 import { AppError } from "../utils/app-error.js"
 
 // Get all users (for admin)
-export const getAllUsers = async (c) => {
+export const getAllUsers = async (req, res) => {
   try {
     // Get all query parameters at once
     const { 
@@ -15,7 +15,7 @@ export const getAllUsers = async (c) => {
       subscription: subscriptionStatus,
       startDate,
       endDate 
-    } = c.req.query()
+    } = req.query
 
     // Build query object once
     const query = {
@@ -51,7 +51,7 @@ export const getAllUsers = async (c) => {
 
     const totalPages = Math.ceil(totalUsers / limit)
 
-    return c.json({
+    return res.json({
       success: true,
       stats: {
         totalUsers,
@@ -67,23 +67,22 @@ export const getAllUsers = async (c) => {
     })
   } catch (error) {
     console.error("Get all users error:", error)
-    return c.json({ success: false, message: "Failed to fetch users" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to fetch users" })
   }
 }
 
 // Add this new function for user profile update
 // Update user profile (for the user themselves)
-export const updateUserProfile = async (c) => {
+export const updateUserProfile = async (req, res) => {
   try {
     // Log what we're getting from the context
-    console.log("Controller received userId:", c.get("userId"));
-    console.log("Controller received user:", c.get("user"));
+    console.log("Controller received userId:", req.user._id);
     
-    const userId = c.get("userId"); // Get the authenticated user's ID
+    const userId = req.user._id; // Get the authenticated user's ID
     
     if (!userId) {
       console.error("No userId found in context");
-      return c.json({ success: false, message: "User not authenticated" }, 401);
+      return res.status(401).json({ success: false, message: "User not authenticated" });
     }
     
     // Get the current user to check if role is changing
@@ -92,119 +91,47 @@ export const updateUserProfile = async (c) => {
       throw new AppError("User not found", 404);
     }
     
-    // Check content type to determine how to process the request
-    const contentType = c.req.header('Content-Type') || '';
+    // Get updates from request body
+    let updates = req.body;
     
-    let updates = {};
-    
-    // Handle different content types
-    if (contentType.includes('application/json')) {
-      // For JSON data
-      updates = await c.req.json();
-    } else if (contentType.includes('multipart/form-data') || contentType.includes('application/x-www-form-urlencoded')) {
-      // For form data (including file uploads)
-      const formData = await c.req.parseBody();
+    // Handle file uploads if present
+    if (req.uploads) {
+      if (req.uploads.profilePicture) {
+        updates.profilePicture = req.uploads.profilePicture;
+      }
       
-      // Extract regular fields from form data
-      Object.keys(formData).forEach(key => {
-        if (key !== 'profilePicture') {
-          updates[key] = formData[key];
-        }
-      });
-    } else {
-      // Invalid content type
-      return c.json({ 
-        success: false, 
-        message: "Invalid Content-Type. Use 'application/json' for regular updates or 'multipart/form-data' for file uploads." 
-      }, 400);
-    }
-    
-    // Fields that users are allowed to update
-    const allowedUpdates = [
-      'name', 
-      'bio', 
-      'dateOfBirth', 
-      'gender', 
-      'phoneNumber', 
-      'country', 
-      'language', 
-      'preferences',
-      'role'
-    ]
-    
-    // Filter out fields that aren't allowed to be updated
-    const filteredUpdates = Object.keys(updates)
-      .filter(key => allowedUpdates.includes(key))
-      .reduce((obj, key) => {
-        obj[key] = updates[key]
-        return obj
-      }, {})
-    
-    // Handle file uploads if they exist in the request
-    const uploads = c.get('uploads') || {};
-    if (uploads.profilePicture) {
-      filteredUpdates.profilePicture = uploads.profilePicture;
-    }
-    
-    // Check if role is being updated to creator
-    const isBecomingCreator = 
-      filteredUpdates.role === 'creator' && 
-      currentUser.role !== 'creator';
-    
-    // Update the user
-    const user = await User.findByIdAndUpdate(
-      userId,
-      filteredUpdates,
-      { new: true, runValidators: true }
-    ).select('-password')
-
-    if (!user) {
-      throw new AppError("User not found", 404)
-    }
-
-    // If user is becoming a creator, create contract and send email
-    if (isBecomingCreator) {
-      try {
-        // Import required services
-        const { default: contractService } = await import('../services/contract.service.js');
-        const { default: emailService } = await import('../services/email.service.js');
-        
-        // Generate creator contract
-        const contract = await contractService.generateCreatorContract({
-          userId: user._id,
-          userName: user.name,
-          userEmail: user.email,
-          creationDate: new Date()
-        });
-        
-        // Send email with contract
-        await emailService.sendCreatorContractEmail({
-          to: user.email,
-          userName: user.name,
-          contractId: contract._id,
-          contractUrl: contract.contractFile
-        });
-        
-        console.log(`Creator contract created and sent to ${user.email}`);
-      } catch (contractError) {
-        // Log error but don't fail the request
-        console.error("Error creating/sending creator contract:", contractError);
+      if (req.uploads.coverPhoto) {
+        updates.coverPhoto = req.uploads.coverPhoto;
       }
     }
-
-    return c.json({
+    
+    // Update the user
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+    
+    return res.json({
       success: true,
-      message: isBecomingCreator ? 
-        "Profile updated successfully. Creator contract has been sent to your email." : 
-        "Profile updated successfully",
-      user
-    })
+      message: "Profile updated successfully",
+      user: {
+        id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        username: updatedUser.username,
+        bio: updatedUser.bio,
+        profilePicture: updatedUser.profilePicture,
+        coverPhoto: updatedUser.coverPhoto,
+        role: updatedUser.role
+      }
+    });
   } catch (error) {
     if (error instanceof AppError) {
-      return c.json({ success: false, message: error.message }, error.statusCode)
+      return res.status(error.statusCode).json({ success: false, message: error.message });
     }
-    console.error("Update profile error:", error)
-    return c.json({ success: false, message: "Failed to update profile: " + error.message }, 500)
+    console.error("Update user profile error:", error);
+    return res.status(500).json({ success: false, message: "Failed to update profile" });
   }
 }
 

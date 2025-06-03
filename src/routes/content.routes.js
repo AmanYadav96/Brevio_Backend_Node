@@ -1,51 +1,25 @@
-import { Hono } from "hono"
-import { protect, restrictTo } from "../middlewares/auth.middleware.js"
-import { UserRole } from "../models/user.model.js"
-import { 
+import express from "express"
+import { protect } from "../middlewares/auth.middleware.js"
+import { handleUpload } from "../middlewares/upload.middleware.js"
+import {
   createContent,
   getAllContent,
-  getContent,
+  getContentById,
   updateContent,
   deleteContent,
-  incrementViews
+  getContentByCategory
 } from "../controllers/content.controller.js"
-import { handleUpload } from '../middlewares/upload.middleware.js'
-import { validateFileSize } from '../middlewares/fileSize.middleware.js'
 
-const router = new Hono()
+const router = express.Router()
 
-// Create content route
-router.post("/", 
-  protect, 
-  restrictTo(UserRole.CREATOR, UserRole.ADMIN),
-  validateFileSize({ video: true, trailer: true }),
-  handleUpload('CONTENT'),
-  createContent
-)
-
-// Get all content
+// Public routes
 router.get("/", getAllContent)
+router.get("/:id", getContentById)
+router.get("/category/:categoryId", getContentByCategory)
 
-// Get content by ID
-router.get("/:id", getContent)
-
-// Update content
-router.put("/:id", 
-  protect, 
-  restrictTo(UserRole.CREATOR, UserRole.ADMIN),
-  validateFileSize({ video: true, trailer: true }),
-  handleUpload('CONTENT'),
-  updateContent
-)
-
-// Delete content
-router.delete("/:id", 
-  protect, 
-  restrictTo(UserRole.CREATOR, UserRole.ADMIN), 
-  deleteContent
-)
-
-// Increment views
-router.post("/:id/views", incrementViews)
+// Protected routes
+router.post("/", protect, handleUpload('CONTENT'), createContent)
+router.put("/:id", protect, handleUpload('CONTENT'), updateContent)
+router.delete("/:id", protect, deleteContent)
 
 export default router

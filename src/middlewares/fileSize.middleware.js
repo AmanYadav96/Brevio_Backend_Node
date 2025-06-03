@@ -1,43 +1,42 @@
-export const validateFileSize = (options) => async (c, next) => {
+export const validateFileSize = (options) => async (req, res, next) => {
   try {
-    const formData = await c.req.formData()
+    // Express doesn't have built-in formData parsing like Hono
+    // The form data will be available through multer or formidable middleware
+    // We'll check the files that have been attached to the request by previous middleware
     
     // Video file validation (500MB limit)
-    if (options.video && formData.has('videoFile')) {
-      const videoFile = formData.get('videoFile')
-      if (videoFile && videoFile instanceof Blob) {
-        const videoSizeInMB = videoFile.size / (1024 * 1024)
+    if (options.video && req.files && req.files.videoFile) {
+      const videoFile = req.files.videoFile;
+      if (videoFile) {
+        const videoSizeInMB = videoFile.size / (1024 * 1024);
         if (videoSizeInMB > 500) {
-          return c.json({ 
+          return res.status(400).json({ 
             success: false, 
             message: "Video file size must be less than 500MB" 
-          }, 400)
+          });
         }
       }
     }
     
     // Trailer file validation (100MB limit)
-    if (options.trailer && formData.has('trailerFile')) {
-      const trailerFile = formData.get('trailerFile')
-      if (trailerFile && trailerFile instanceof Blob) {
-        const trailerSizeInMB = trailerFile.size / (1024 * 1024)
+    if (options.trailer && req.files && req.files.trailerFile) {
+      const trailerFile = req.files.trailerFile;
+      if (trailerFile) {
+        const trailerSizeInMB = trailerFile.size / (1024 * 1024);
         if (trailerSizeInMB > 100) {
-          return c.json({ 
+          return res.status(400).json({ 
             success: false, 
             message: "Trailer file size must be less than 100MB" 
-          }, 400)
+          });
         }
       }
     }
     
-    // Reattach the form data to the request
-    c.req.formData = () => Promise.resolve(formData)
-    
-    await next()
+    next();
   } catch (error) {
-    return c.json({ 
+    return res.status(500).json({ 
       success: false, 
       message: "Error processing file upload" 
-    }, 500)
+    });
   }
 }

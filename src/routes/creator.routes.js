@@ -1,12 +1,13 @@
-import { Hono } from "hono"
-import { protect, restrictTo } from "../middlewares/auth.middleware.js"
-import { UserRole } from "../models/user.model.js"
+import express from "express"
+import { protect } from "../middlewares/auth.middleware.js"
+import { getCreatorDashboard } from "../controllers/creator.controller.js"
 
-const router = new Hono()
+const router = express.Router()
 
-// Protected routes for creators
-router.get("/dashboard", protect, restrictTo(UserRole.CREATOR, UserRole.ADMIN), (c) => {
-  return c.json({ message: "Creator dashboard route" })
-})
+// All routes require authentication
+router.use(protect)
+
+// Get creator dashboard data
+router.get("/dashboard", getCreatorDashboard)
 
 export default router

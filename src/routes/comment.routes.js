@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import express from 'express'
 import { 
   createComment, 
   getComments, 
@@ -9,17 +9,17 @@ import {
 } from '../controllers/comment.controller.js'
 import { protect } from '../middlewares/auth.middleware.js'
 
-const app = new Hono()
+const router = express.Router()
 
 // Public routes
-app.get('/', getComments)
+router.get('/', getComments)
 
 // Protected routes
-app.use('*', protect)
-app.post('/', createComment)
-app.patch('/:id', updateComment)
-app.delete('/:id', deleteComment)
-app.post('/:id/report', reportComment)
-app.get('/user', getUserComments)
+router.use(protect)
+router.post('/', createComment)
+router.patch('/:id', updateComment)
+router.delete('/:id', deleteComment)
+router.post('/:id/report', reportComment)
+router.get('/user', getUserComments)
 
-export default app
+export default router

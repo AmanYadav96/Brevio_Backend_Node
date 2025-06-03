@@ -3,10 +3,10 @@ import CreatorContent from '../models/creatorContent.model.js'
 import { UserRole } from '../models/user.model.js'
 
 // Create a new slider
-export const createSlider = async (c) => {
+export const createSlider = async (req, res) => {
   try {
-    const user = c.get('user')
-    const { title, image, associatedContent, status } = await c.req.json()
+    const user = req.user
+    const { title, image, associatedContent, status } = req.body
     
     // Validate associated content IDs
     if (associatedContent && associatedContent.length > 0) {
@@ -17,10 +17,10 @@ export const createSlider = async (c) => {
       })
       
       if (validContent !== contentIds.length) {
-        return c.json({
+        return res.status(400).json({
           success: false,
           message: 'One or more content items are invalid or not published'
-        }, 400)
+        })
       }
     }
     
@@ -32,17 +32,17 @@ export const createSlider = async (c) => {
       createdBy: user._id
     })
     
-    return c.json({
+    return res.json({
       success: true,
       message: 'Slider created successfully',
       data: slider
     })
   } catch (error) {
     console.error('Create slider error:', error)
-    return c.json({
+    return res.status(500).json({
       success: false,
       message: error.message
-    }, 500)
+    })
   }
 }
 

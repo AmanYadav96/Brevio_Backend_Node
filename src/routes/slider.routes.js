@@ -1,4 +1,4 @@
-import { Hono } from "hono"
+import express from "express"
 import { 
   createSlider, 
   getAllSliders, 
@@ -10,19 +10,19 @@ import {
 import { protect, restrictTo } from "../middlewares/auth.middleware.js"
 import { UserRole } from "../models/user.model.js"
 
-const app = new Hono()
+const router = express.Router()
 
 // Public routes
-app.get("/active", getActiveSliders)
+router.get("/active", getActiveSliders)
 
 // Protected routes
-app.use("*", protect)
+router.use(protect)
 
 // Admin only routes
-app.post("/", restrictTo(UserRole.ADMIN), createSlider)
-app.get("/", restrictTo(UserRole.ADMIN), getAllSliders)
-app.get("/:sliderId", restrictTo(UserRole.ADMIN), getSliderById)
-app.put("/:sliderId", restrictTo(UserRole.ADMIN), updateSlider)
-app.delete("/:sliderId", restrictTo(UserRole.ADMIN), deleteSlider)
+router.post("/", restrictTo(UserRole.ADMIN), createSlider)
+router.get("/", restrictTo(UserRole.ADMIN), getAllSliders)
+router.get("/:sliderId", restrictTo(UserRole.ADMIN), getSliderById)
+router.put("/:sliderId", restrictTo(UserRole.ADMIN), updateSlider)
+router.delete("/:sliderId", restrictTo(UserRole.ADMIN), deleteSlider)
 
-export default app
+export default router
