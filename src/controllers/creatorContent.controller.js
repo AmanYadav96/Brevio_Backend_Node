@@ -471,19 +471,19 @@ export const getContentById = async (c) => {
 }
 
 // Get all content (with filters)
-export const getAllContent = async (c) => {
+export const getAllContent = async (req, res) => {
   try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      contentType, 
-      orientation, 
+    const {
+      page = 1,
+      limit = 10,
+      contentType,
+      orientation,
       status,
       creatorId,
       search,
       sort = 'createdAt',
       order = 'desc'
-    } = c.req.query()
+    } = req.query
     
     const query = {}
     
@@ -502,7 +502,7 @@ export const getAllContent = async (c) => {
     }
     
     // Only show published content for non-admin users
-    const user = c.get('user')
+    const user = req.user
     if (!user || user.role !== UserRole.ADMIN) {
       query.status = 'published'
     }
@@ -524,7 +524,7 @@ export const getAllContent = async (c) => {
       CreatorContent.countDocuments(query)
     ])
     
-    return c.json({
+    return res.json({
       success: true,
       content,
       pagination: {
@@ -536,18 +536,18 @@ export const getAllContent = async (c) => {
     })
   } catch (error) {
     console.error("Get all content error:", error)
-    return c.json({ 
+    return res.status(500).json({ 
       success: false, 
       message: error.message 
-    }, 500)
+    })
   }
 }
 
 // Purchase educational content
-export const purchaseEducationalContent = async (c) => {
+export const purchaseEducationalContent = async (req, res) => {
   try {
-    const user = c.get('user')
-    const { contentId } = c.req.param()
+    const user = req.user
+    const { contentId } = req.params
     
     // Find content
     const content = await CreatorContent.findById(contentId)
@@ -602,10 +602,10 @@ export const purchaseEducationalContent = async (c) => {
     })
   } catch (error) {
     console.error("Purchase content error:", error)
-    return c.json({ 
+    return res.status(500).json({ 
       success: false, 
       message: error.message 
-    }, 500)
+    })
   }
 }
 

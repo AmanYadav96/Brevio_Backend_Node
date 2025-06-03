@@ -47,9 +47,13 @@ export const createSlider = async (req, res) => {
 }
 
 // Get all sliders
-export const getAllSliders = async (c) => {
+// Before:
+
+
+// After:
+export const getAllSliders = async (req, res) => {
   try {
-    const { status } = c.req.query()
+    const { status } = req.query
     const query = {}
     
     if (status) {
@@ -63,17 +67,17 @@ export const getAllSliders = async (c) => {
       })
       .sort({ createdAt: -1 })
     
-    return c.json({
+    return res.json({
       success: true,
       count: sliders.length,
       data: sliders
     })
   } catch (error) {
     console.error('Get sliders error:', error)
-    return c.json({
+    return res.status(500).json({
       success: false,
       message: error.message
-    }, 500)
+    })
   }
 }
 

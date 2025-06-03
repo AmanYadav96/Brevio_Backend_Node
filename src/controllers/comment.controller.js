@@ -61,9 +61,63 @@ export const createComment = async (req, res) => {
 }
 
 // Get comments for content
-export const getComments = async (c) => {
+// Before:
+// export const getComments = async (c) => {
+//   try {
+//     const { contentType, contentId, page = 1, limit = 10 } = c.req.query()
+    
+//     // Validate content type
+//     if (!['content', 'creatorContent'].includes(contentType)) {
+//       throw new AppError('Invalid content type', 400)
+//     }
+    
+//     // Get top-level comments (not replies)
+//     const comments = await Comment.find({
+//       contentType,
+//       contentId,
+//       parentComment: null,
+//       status: 'active'
+//     })
+//       .sort({ createdAt: -1 })
+//       .skip((parseInt(page) - 1) * parseInt(limit))
+//       .limit(parseInt(limit))
+//       .populate('user', 'name profilePicture')
+//       .populate({
+//         path: 'replies',
+//         match: { status: 'active' },
+//         options: { sort: { createdAt: 1 } },
+//         populate: { path: 'user', select: 'name profilePicture' }
+//       })
+    
+//     const total = await Comment.countDocuments({
+//       contentType,
+//       contentId,
+//       parentComment: null,
+//       status: 'active'
+//     })
+    
+//     return c.json({
+//       success: true,
+//       comments,
+//       pagination: {
+//         total,
+//         page: parseInt(page),
+//         pages: Math.ceil(total / parseInt(limit))
+//       }
+//     })
+//   } catch (error) {
+//     console.error('Get comments error:', error)
+//     return c.json({
+//       success: false,
+//       message: error.message || 'Failed to get comments'
+//     }, error.statusCode || 500)
+//   }
+// }
+
+// After:
+export const getComments = async (req, res) => {
   try {
-    const { contentType, contentId, page = 1, limit = 10 } = c.req.query()
+    const { contentType, contentId, page = 1, limit = 10 } = req.query
     
     // Validate content type
     if (!['content', 'creatorContent'].includes(contentType)) {
@@ -95,7 +149,7 @@ export const getComments = async (c) => {
       status: 'active'
     })
     
-    return c.json({
+    return res.json({
       success: true,
       comments,
       pagination: {
@@ -106,19 +160,23 @@ export const getComments = async (c) => {
     })
   } catch (error) {
     console.error('Get comments error:', error)
-    return c.json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message || 'Failed to get comments'
-    }, error.statusCode || 500)
+    })
   }
 }
 
 // Update a comment
-export const updateComment = async (c) => {
+// Before:
+
+
+// After:
+export const updateComment = async (req, res) => {
   try {
-    const userId = c.get('user')._id
-    const commentId = c.req.param('id')
-    const { text } = await c.req.json()
+    const userId = req.user._id
+    const commentId = req.params.id
+    const { text } = req.body
     
     // Validate text
     if (!text || text.trim().length === 0) {
@@ -140,17 +198,17 @@ export const updateComment = async (c) => {
     comment.text = text
     await comment.save()
     
-    return c.json({
+    return res.json({
       success: true,
       message: 'Comment updated successfully',
       comment
     })
   } catch (error) {
     console.error('Update comment error:', error)
-    return c.json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message || 'Failed to update comment'
-    }, error.statusCode || 500)
+    })
   }
 }
 

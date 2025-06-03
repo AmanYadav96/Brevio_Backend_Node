@@ -59,14 +59,23 @@ app.use(async (req, res, next) => {
 // Middleware
 app.use(morgan('dev'));
 
-// Updated CORS configuration
+// Updated CORS configuration to allow all origins
 app.use(cors({
-  origin: ['https://amans-project.netlify.app', 'http://localhost:3000'],
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Access-Control-Allow-Origin'],
   credentials: true,
   optionsSuccessStatus: 204
 }));
+
+// Add additional headers for CORS
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  next();
+});
 
 app.use(helmet());
 app.use(express.json());
