@@ -16,7 +16,7 @@
     "axios": "^1.9.0",
     "bcryptjs": "^9.0.0",
     "body-parser": "^1.20.2",
-    "busboy": "^1.6.0",
+    "busboy": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
