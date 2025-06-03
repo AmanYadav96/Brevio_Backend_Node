@@ -98,20 +98,20 @@ export const createPayment = async (req, res) => {
       payment
     })
   } catch (error) {
-    console.error('Create payment error:', error)
-    return res.status(500).json(createError(500, error.message || 'Failed to create payment'))
+    console.error('Error creating payment:', error)
+    return res.status(500).json(createError(500, 'Error creating payment'))
   }
 }
 
 // Process a payment with Stripe
-export const processStripePayment = async (c) => {
+export const processStripePayment = async (req, res) => {
   try {
-    const { paymentId, paymentMethodId } = await c.req.json()
+    const { paymentId, paymentMethodId } = req.body
 
     // Find the payment
     const payment = await Payment.findById(paymentId)
     if (!payment) {
-      return c.json(createError(404, 'Payment not found'), 404)
+      return res.status(404).json(createError(404, 'Payment not found'))
     }
 
     // Create a payment intent with Stripe
@@ -140,7 +140,7 @@ export const processStripePayment = async (c) => {
     
     await payment.save()
 
-    return c.json({
+    return res.json({
       success: true,
       message: 'Payment processed successfully',
       payment,
@@ -148,7 +148,7 @@ export const processStripePayment = async (c) => {
     })
   } catch (error) {
     console.error('Error processing payment:', error)
-    return c.json(createError(500, 'Error processing payment: ' + error.message), 500)
+    return res.status(500).json(createError(500, 'Error processing payment: ' + error.message))
   }
 }
 
@@ -221,12 +221,12 @@ function calculateSubscriptionEndDate(payment) {
 }
 
 // Get user's payment history
-export const getUserPayments = async (c) => {
+export const getUserPayments = async (req, res) => {
   try {
-    const userId = c.get('user')._id
-    const page = parseInt(c.req.query('page')) || 1
-    const limit = parseInt(c.req.query('limit')) || 10
-    const paymentType = c.req.query('type')
+    const userId = req.user._id
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 10
+    const paymentType = req.query.type
     
     const query = { userId }
     if (paymentType && Object.values(PaymentType).includes(paymentType)) {
@@ -243,7 +243,7 @@ export const getUserPayments = async (c) => {
     
     const total = await Payment.countDocuments(query)
     
-    return c.json({
+    return res.json({
       success: true,
       payments,
       pagination: {
@@ -254,19 +254,19 @@ export const getUserPayments = async (c) => {
     })
   } catch (error) {
     console.error('Error getting user payments:', error)
-    return c.json(createError(500, 'Error getting user payments'), 500)
+    return res.status(500).json(createError(500, 'Error getting user payments'))
   }
 }
 
 // Get creator's received payments
-export const getCreatorPayments = async (c) => {
+export const getCreatorPayments = async (req, res) => {
   try {
-    const creatorId = c.get('user')._id
-    const page = parseInt(c.req.query('page')) || 1
-    const limit = parseInt(c.req.query('limit')) || 10
-    const paymentType = c.req.query('type')
-    const startDate = c.req.query('startDate')
-    const endDate = c.req.query('endDate')
+    const creatorId = req.user._id
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 10
+    const paymentType = req.query.type
+    const startDate = req.query.startDate
+    const endDate = req.query.endDate
     
     const query = { 
       creatorId,
@@ -323,7 +323,7 @@ export const getCreatorPayments = async (c) => {
       }}
     ])
     
-    return c.json({
+    return res.json({
       success: true,
       payments,
       stats: {
@@ -339,21 +339,21 @@ export const getCreatorPayments = async (c) => {
     })
   } catch (error) {
     console.error('Error getting creator payments:', error)
-    return c.json(createError(500, 'Error getting creator payments'), 500)
+    return res.status(500).json(createError(500, 'Error getting creator payments'))
   }
 }
 
 // Process creator payout (admin only)
-export const processCreatorPayout = async (c) => {
+export const processCreatorPayout = async (req, res) => {
   try {
-    const adminId = c.get('user')._id
+    const adminId = req.user._id
     const { 
       creatorId, 
       amount, 
       currency = 'USD',
       payoutMethod,
       notes
-    } = await c.req.json()
+    } = req.body
     
     // Create the payout payment
     const payment = new Payment({
@@ -373,21 +373,21 @@ export const processCreatorPayout = async (c) => {
     
     await payment.save()
     
-    return c.json({
+    return res.json({
       success: true,
       message: 'Creator payout processed successfully',
       payment
     })
   } catch (error) {
     console.error('Error processing creator payout:', error)
-    return c.json(createError(500, 'Error processing creator payout'), 500)
+    return res.status(500).json(createError(500, 'Error processing creator payout'))
   }
 }
 
 // Get payment details
-export const getPaymentDetails = async (c) => {
+export const getPaymentDetails = async (req, res) => {
   try {
-    const paymentId = c.req.param('id')
+    const paymentId = req.params.id
     
     const payment = await Payment.findById(paymentId)
       .populate('userId', 'name email profilePicture')
@@ -398,31 +398,31 @@ export const getPaymentDetails = async (c) => {
       .populate('channelSubscriptionId')
     
     if (!payment) {
-      return c.json(createError(404, 'Payment not found'), 404)
+      return res.status(404).json(createError(404, 'Payment not found'))
     }
     
-    return c.json({
+    return res.json({
       success: true,
       payment
     })
   } catch (error) {
     console.error('Error getting payment details:', error)
-    return c.json(createError(500, 'Error getting payment details'), 500)
+    return res.status(500).json(createError(500, 'Error getting payment details'))
   }
 }
 
 // Process refund
-export const processRefund = async (c) => {
+export const processRefund = async (req, res) => {
   try {
-    const { paymentId, amount, reason } = await c.req.json()
+    const { paymentId, amount, reason } = req.body
     
     const payment = await Payment.findById(paymentId)
     if (!payment) {
-      return c.json(createError(404, 'Payment not found'), 404)
+      return res.status(404).json(createError(404, 'Payment not found'))
     }
     
     if (payment.status !== PaymentStatus.COMPLETED) {
-      return c.json(createError(400, 'Only completed payments can be refunded'), 400)
+      return res.status(400).json(createError(400, 'Only completed payments can be refunded'))
     }
     
     // Process refund with Stripe if payment was made with Stripe
@@ -437,13 +437,13 @@ export const processRefund = async (c) => {
     // Update payment with refund details
     await payment.processRefund(amount, reason)
     
-    return c.json({
+    return res.json({
       success: true,
       message: 'Refund processed successfully',
       payment
     })
   } catch (error) {
     console.error('Error processing refund:', error)
-    return c.json(createError(500, 'Error processing refund: ' + error.message), 500)
+    return res.status(500).json(createError(500, 'Error processing refund: ' + error.message))
   }
 }

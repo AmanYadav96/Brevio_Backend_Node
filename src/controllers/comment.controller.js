@@ -213,11 +213,11 @@ export const updateComment = async (req, res) => {
 }
 
 // Delete a comment
-export const deleteComment = async (c) => {
+export const deleteComment = async (req, res) => {
   try {
-    const userId = c.get('user')._id
-    const userRole = c.get('user').role
-    const commentId = c.req.param('id')
+    const userId = req.user._id
+    const userRole = req.user.role
+    const commentId = req.params.id
     
     // Find the comment
     const comment = await Comment.findById(commentId)
@@ -237,16 +237,16 @@ export const deleteComment = async (c) => {
     comment.status = 'deleted'
     await comment.save()
     
-    return c.json({
+    return res.json({
       success: true,
       message: 'Comment deleted successfully'
     })
   } catch (error) {
     console.error('Delete comment error:', error)
-    return c.json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message || 'Failed to delete comment'
-    }, error.statusCode || 500)
+    })
   }
 }
 

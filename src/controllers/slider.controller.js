@@ -82,9 +82,9 @@ export const getAllSliders = async (req, res) => {
 }
 
 // Get slider by ID
-export const getSliderById = async (c) => {
+export const getSliderById = async (req, res) => {
   try {
-    const { sliderId } = c.req.param()
+    const { sliderId } = req.params
     
     const slider = await Slider.findById(sliderId)
       .populate({
@@ -93,22 +93,22 @@ export const getSliderById = async (c) => {
       })
     
     if (!slider) {
-      return c.json({
+      return res.status(404).json({
         success: false,
         message: 'Slider not found'
-      }, 404)
+      })
     }
     
-    return c.json({
+    return res.json({
       success: true,
       data: slider
     })
   } catch (error) {
     console.error('Get slider error:', error)
-    return c.json({
+    return res.status(500).json({
       success: false,
       message: error.message
-    }, 500)
+    })
   }
 }
 

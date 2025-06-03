@@ -107,10 +107,11 @@ export const getLikes = async (req, res) => {
 }
 
 // Get user's liked content
-export const getUserLikes = async (c) => {
+// Get user likes
+export const getUserLikes = async (req, res) => {
   try {
-    const userId = c.get('user')._id
-    const { contentType, page = 1, limit = 10 } = c.req.query()
+    const userId = req.user._id
+    const { contentType, page = 1, limit = 10 } = req.query
     
     // Build query
     const query = { user: userId }
@@ -133,20 +134,21 @@ export const getUserLikes = async (c) => {
     
     const total = await Like.countDocuments(query)
     
-    return c.json({
+    return res.json({
       success: true,
       likes,
       pagination: {
         total,
         page: parseInt(page),
+        limit: parseInt(limit),
         pages: Math.ceil(total / parseInt(limit))
       }
     })
   } catch (error) {
     console.error('Get user likes error:', error)
-    return c.json({
+    return res.status(500).json({
       success: false,
-      message: error.message || 'Failed to get user likes'
-    }, error.statusCode || 500)
+      message: error.message
+    })
   }
 }

@@ -143,11 +143,11 @@ export const getSavedContent = async (req, res) => {
 }
 
 // Update saved content folder
-export const updateSavedFolder = async (c) => {
+export const updateSaveFolder = async (req, res) => {
   try {
-    const userId = c.get('user')._id
-    const saveId = c.req.param('id')
-    const { folder } = await c.req.json()
+    const userId = req.user._id
+    const saveId = req.params.id
+    const { folder } = req.body
     
     // Find the save
     const save = await Save.findById(saveId)
@@ -164,16 +164,16 @@ export const updateSavedFolder = async (c) => {
     save.folder = folder
     await save.save()
     
-    return c.json({
+    return res.json({
       success: true,
-      message: 'Saved content updated successfully',
+      message: 'Save updated successfully',
       save
     })
   } catch (error) {
-    console.error('Update saved folder error:', error)
-    return c.json({
+    console.error('Update save folder error:', error)
+    return res.status(500).json({
       success: false,
-      message: error.message || 'Failed to update saved content'
-    }, error.statusCode || 500)
+      message: error.message
+    })
   }
 }

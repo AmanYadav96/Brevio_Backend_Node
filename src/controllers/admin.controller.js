@@ -184,10 +184,11 @@ export const getAllCreators = async (req, res) => {
  * @param {Object} c - Context
  * @returns {Object} Creator details
  */
-export const getCreatorById = async (c) => {
+// Get creator by ID
+export const getCreatorById = async (req, res) => {
   try {
-    const user = c.get('user');
-    const { creatorId } = c.req.param();
+    const user = req.user;
+    const { creatorId } = req.params;
     
     // Check if user is admin
     if (user.role !== UserRole.ADMIN) {
@@ -215,24 +216,18 @@ export const getCreatorById = async (c) => {
       type: 'creator'
     }).sort({ createdAt: -1 });
     
-    return c.json({
+    return res.json({
       success: true,
-      creator: {
-        ...creator.toObject(),
-        totalContent: content.length,
-        contractStatus: contract ? contract.status : 'No Contract',
-        contractId: contract ? contract._id : null
-      },
-      content
-    });
+      creator
+    })
   } catch (error) {
-    console.error('Get creator by ID error:', error);
-    return c.json({
+    console.error('Get creator error:', error)
+    return res.status(500).json({
       success: false,
       message: error.message
-    }, error.statusCode || 500);
+    })
   }
-};
+}
 
 /**
  * Block/unblock a creator

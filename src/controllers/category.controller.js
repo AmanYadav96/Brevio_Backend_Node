@@ -56,33 +56,25 @@ export const createCategory = async (req, res) => {
 }
 
 // Get all categories
-export const getAllCategories = async (c) => {
+export const getAllCategories = async (req, res) => {
   try {
-    const { status } = c.req.query()
+    const { status } = req.query
+    
     const query = {}
+    if (status) query.status = status
     
-    if (status) {
-      query.status = status
-    }
+    const categories = await Category.find(query).sort({ order: 1 })
     
-    const categories = await Category.find(query)
-      .populate({
-        path: 'associatedContent.content',
-        select: 'title thumbnail contentType'
-      })
-      .sort({ name: 1 })
-    
-    return c.json({
+    return res.json({
       success: true,
-      count: categories.length,
       data: categories
     })
   } catch (error) {
     console.error('Get categories error:', error)
-    return c.json({
+    return res.status(500).json({
       success: false,
       message: error.message
-    }, 500)
+    })
   }
 }
 

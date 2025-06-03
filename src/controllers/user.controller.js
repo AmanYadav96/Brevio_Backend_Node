@@ -135,26 +135,25 @@ export const updateUserProfile = async (req, res) => {
   }
 }
 
-// Get user profile (for the user themselves)
-export const getUserProfile = async (c) => {
+// Get user profile
+export const getUserProfile = async (req, res) => {
   try {
-    const userId = c.get('user')._id // Get the authenticated user's ID
+    const userId = req.user._id // Get the authenticated user's ID
     
     const user = await User.findById(userId).select('-password')
     if (!user) {
       throw new AppError("User not found", 404)
     }
 
-    return c.json({
+    return res.json({
       success: true,
       user
     })
   } catch (error) {
     if (error instanceof AppError) {
-      return c.json({ success: false, message: error.message }, error.statusCode)
+      return res.status(error.statusCode).json({ success: false, message: error.message })
     }
-    console.error("Get profile error:", error)
-    return c.json({ success: false, message: "Failed to fetch profile" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to fetch profile" })
   }
 }
 

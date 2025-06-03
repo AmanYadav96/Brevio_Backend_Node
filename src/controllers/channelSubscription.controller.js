@@ -103,9 +103,10 @@ export const subscribeToChannel = async (req, res) => {
 }
 
 // Get all channels a user is subscribed to
-export const getUserSubscriptions = async (c) => {
+// Get user subscriptions
+export const getUserSubscriptions = async (req, res) => {
   try {
-    const userId = c.get('user')._id
+    const userId = req.user._id
     
     const subscriptions = await ChannelSubscription.find({ 
       user: userId,
@@ -115,18 +116,16 @@ export const getUserSubscriptions = async (c) => {
     .populate('channel', 'name description thumbnail')
     .populate('subscription', 'name price duration')
     
-    return c.json({
+    return res.json({
       success: true,
-      count: subscriptions.length,
-      data: subscriptions
+      subscriptions
     })
   } catch (error) {
-    console.error('Error getting user subscriptions:', error)
-    return c.json({ 
-      success: false, 
-      message: 'Failed to get subscriptions', 
-      error: error.message 
-    }, 500)
+    console.error('Get user subscriptions error:', error)
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    })
   }
 }
 

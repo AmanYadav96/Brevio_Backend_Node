@@ -117,13 +117,13 @@ export const createContract = async (req, res) => {
 }
 
 // Get all contracts (admin)
-export const getAllContracts = async (c) => {
+export const getAllContracts = async (req, res) => {
   try {
-    const page = parseInt(c.req.query('page')) || 1
-    const limit = parseInt(c.req.query('limit')) || 10
-    const status = c.req.query('status')
-    const type = c.req.query('type')
-    const search = c.req.query('search') || ''
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 10
+    const status = req.query.status
+    const type = req.query.type
+    const search = req.query.search || ''
     
     // Build query
     const query = {}
@@ -153,21 +153,22 @@ export const getAllContracts = async (c) => {
     
     const total = await Contract.countDocuments(query)
     
-    return c.json({
+    return res.json({
       success: true,
-      contracts,
+      data: contracts,
       pagination: {
         total,
         page,
+        limit,
         pages: Math.ceil(total / limit)
       }
     })
   } catch (error) {
-    console.error('Error getting contracts:', error)
-    return c.json({
+    console.error('Get all contracts error:', error)
+    return res.status(500).json({
       success: false,
-      message: error.message || 'Error getting contracts'
-    }, error.statusCode || 500)
+      message: error.message
+    })
   }
 }
 

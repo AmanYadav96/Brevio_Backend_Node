@@ -90,13 +90,13 @@ export const createReport = async (req, res) => {
   }
 }
 
-// Get user's reports
-export const getUserReports = async (c) => {
+// Get user reports
+export const getUserReports = async (req, res) => {
   try {
-    const userId = c.get('user')._id
-    const page = parseInt(c.req.query('page')) || 1
-    const limit = parseInt(c.req.query('limit')) || 10
-    const status = c.req.query('status')
+    const userId = req.user._id
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 10
+    const status = req.query.status
     
     const query = { reporterId: userId }
     
@@ -114,18 +114,22 @@ export const getUserReports = async (c) => {
     
     const total = await Report.countDocuments(query)
     
-    return c.json({
+    return res.json({
       success: true,
       reports,
       pagination: {
         total,
         page,
+        limit,
         pages: Math.ceil(total / limit)
       }
     })
   } catch (error) {
-    console.error('Error getting user reports:', error)
-    return c.json(createError(500, 'Error getting user reports'), 500)
+    console.error('Get user reports error:', error)
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Error getting user reports'
+    })
   }
 }
 
