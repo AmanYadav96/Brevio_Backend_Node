@@ -4,6 +4,7 @@ import 'dotenv/config';
 import morgan from 'morgan';
 import helmet from 'helmet';
 import http from 'http';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { connectDB } from "./src/config/database.js";
@@ -141,8 +142,13 @@ process.on('unhandledRejection', (error) => {
   // Log the error but keep the server running
 });
 
+const options = {
+  key: fs.readFileSync('./cert/private.key'),
+  cert: fs.readFileSync('./cert/certificate.crt'),
+  ca: fs.readFileSync('./cert/ca_bundle.crt') // If you have a CA bundle
+};
 // Create HTTP server
-const server = http.createServer(app);
+const server = http.createServer(options,app);
 
 // Initialize Socket.io with the HTTP server
 socketService.initialize(server);
