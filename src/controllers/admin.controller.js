@@ -228,37 +228,19 @@ export const getCreatorById = async (req, res) => {
     })
   }
 }
-
 /**
  * Block/unblock a creator
- * @param {Object} c - Context
+ * @param {Object} req - Request
+ * @param {Object} res - Response
  * @returns {Object} Updated creator
  */
-export const toggleCreatorBlock = async (c) => {
+export const toggleCreatorBlock = async (req, res) => {
   try {
-    const user = c.get('user');
-    const { creatorId } = c.req.param();
+    const user = req.user;
+    const { creatorId } = req.params;
     
-    // Try to parse JSON body, but handle potential errors
-    let action;
-    try {
-      const body = await c.req.json();
-      action = body.action;
-    } catch (parseError) {
-      // If JSON parsing fails, try to get from URL query parameter
-      action = c.req.query('action');
-      
-      // If still no action, check if it's in form data
-      if (!action) {
-        try {
-          const formData = await c.req.parseBody();
-          action = formData.action;
-        } catch (formError) {
-          // If all parsing methods fail, return error
-          throw new AppError('Invalid request format. Action parameter is required', 400);
-        }
-      }
-    }
+    // Get action from request body
+    let action = req.body.action;
     
     // Check if user is admin
     if (user.role !== UserRole.ADMIN) {
@@ -312,7 +294,7 @@ export const toggleCreatorBlock = async (c) => {
       console.error('Error sending account status email:', emailError);
     }
     
-    return c.json({
+    return res.status(200).json({
       success: true,
       message: `Creator ${action === 'block' ? 'blocked' : 'unblocked'} successfully`,
       creator: {
@@ -325,22 +307,23 @@ export const toggleCreatorBlock = async (c) => {
     });
   } catch (error) {
     console.error('Toggle creator block error:', error);
-    return c.json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message
-    }, error.statusCode || 500);
+    });
   }
 };
 
 /**
  * Delete a creator
- * @param {Object} c - Context
+ * @param {Object} req - Request
+ * @param {Object} res - Response
  * @returns {Object} Success message
  */
-export const deleteCreator = async (c) => {
+export const deleteCreator = async (req, res) => {
   try {
-    const user = c.get('user');
-    const { creatorId } = c.req.param();
+    const user = req.user;
+    const { creatorId } = req.params;
     
     // Check if user is admin
     if (user.role !== UserRole.ADMIN) {
@@ -398,15 +381,15 @@ export const deleteCreator = async (c) => {
       console.error('Error sending account deleted email:', emailError);
     }
     
-    return c.json({
+    return res.status(200).json({
       success: true,
       message: 'Creator and all associated data deleted successfully'
     });
   } catch (error) {
     console.error('Delete creator error:', error);
-    return c.json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message
-    }, error.statusCode || 500);
+    });
   }
 };
