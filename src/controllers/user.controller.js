@@ -183,7 +183,7 @@ export const getUser = async (req, res) => {
 // Update user (for admin)
 export const updateUser = async (req, res) => {
   try {
-    const userId = req.params._id
+    const userId = req.params.id
     const updates = req.body
     
     // Prevent updating sensitive fields
