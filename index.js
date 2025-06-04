@@ -159,7 +159,7 @@ socketService.initialize(server);
 server.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
-server.timeout = 1000000;
+
 
 // Export for serverless environments
 export default app;
