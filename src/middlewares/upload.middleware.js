@@ -193,15 +193,13 @@ export const handleUpload = (type) => {
         try {
           // Use formidable for more robust form parsing with increased timeout
           const form = formidable({
-            maxFileSize: maxFileSize.video, // Set to max video size
+            maxFileSize: 500 * 1024 * 1024, // 500 MB
             multiples: true,
             keepExtensions: true,
             uploadDir: tempDir,
             allowEmptyFiles: false,
             maxFields: 20,
-            maxFieldsSize: 1 * 1024 * 1024, // 1MB for text fields,
-            // Increase timeout to 30 minutes to prevent request aborted errors
-            timeout: 30 * 60 * 1000
+            maxFieldsSize: 1 * 1024 * 1024, // 1MB for text fields
           });
           
           // Add progress tracking to detect stalled uploads
@@ -482,11 +480,12 @@ export const handleUpload = (type) => {
 async function initializeChunkedUpload(req, uploadConfig, user) {
   try {
     const form = formidable({
-      maxFileSize: 10 * 1024 * 1024, // Just for metadata, not the actual file
-      multiples: false,
-      keepExtensions: true,
-      uploadDir: tempDir,
-    });
+    maxFileSize: 500 * 1024 * 1024, // 500 MB
+    allowEmptyFiles: false,
+    multiples: false,
+    keepExtensions: true,
+    uploadDir: tempDir
+  });
     
     // Parse the form
     const [fields] = await new Promise((resolve, reject) => {
@@ -618,11 +617,11 @@ async function handleChunkUpload(req, fileId, chunkIndex, totalChunks) {
     
     // Parse the form with increased timeout
     const form = formidable({
-      maxFileSize: 20 * 1024 * 1024, // 20MB per chunk
+      maxFileSize: 500 * 1024 * 1024, // 500 MB
+      allowEmptyFiles: false,
       multiples: false,
       keepExtensions: true,
-      uploadDir: tempDir,
-      timeout: 5 * 60 * 1000 // 5 minute timeout per chunk
+      uploadDir: tempDir
     });
     
     const [_, files] = await new Promise((resolve, reject) => {
@@ -749,7 +748,11 @@ async function completeChunkedUpload(req, fileId) {
     
     // Parse the form
     const form = formidable({
-      maxFieldsSize: 1 * 1024 * 1024, // 1MB for fields
+      maxFileSize: 500 * 1024 * 1024, // 500 MB
+      allowEmptyFiles: false,
+      multiples: false,
+      keepExtensions: true,
+      maxFieldsSize: 1 * 1024 * 1024 // 1MB for fields
     });
     
     const [fields] = await new Promise((resolve, reject) => {
@@ -935,7 +938,8 @@ export const optionalUpload = async (req, res, next) => {
     try {
       // Use formidable for parsing
       const form = formidable({
-        maxFileSize: maxFileSize.image,
+        maxFileSize: 500 * 1024 * 1024, // 500 MB
+        allowEmptyFiles: false,
         multiples: true,
         keepExtensions: true,
         uploadDir: tempDir
