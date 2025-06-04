@@ -134,16 +134,16 @@ export const getUserReports = async (req, res) => {
 }
 
 // Get all reports (admin only)
-export const getAllReports = async (c) => {
+export const getAllReports = async (req, res) => {
   try {
-    const page = parseInt(c.req.query('page')) || 1
-    const limit = parseInt(c.req.query('limit')) || 10
-    const status = c.req.query('status')
-    const issueType = c.req.query('issueType')
-    const contentType = c.req.query('contentType')
-    const search = c.req.query('search') || ''
-    const sortBy = c.req.query('sortBy') || 'createdAt'
-    const sortOrder = c.req.query('sortOrder') || 'desc'
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 10
+    const status = req.query.status
+    const issueType = req.query.issueType
+    const contentType = req.query.contentType
+    const search = req.query.search || ''
+    const sortBy = req.query.sortBy || 'createdAt'
+    const sortOrder = req.query.sortOrder || 'desc'
     
     // Build query
     const query = {}
@@ -194,7 +194,7 @@ export const getAllReports = async (c) => {
       statusStats[stat._id] = stat.count
     })
     
-    return c.json({
+    return res.json({
       success: true,
       reports,
       stats: {
@@ -209,16 +209,16 @@ export const getAllReports = async (c) => {
     })
   } catch (error) {
     console.error('Error getting all reports:', error)
-    return c.json(createError(500, 'Error getting all reports'), 500)
+    return res.status(500).json(createError(500, 'Error getting all reports'))
   }
 }
 
 // Get report details
-export const getReportDetails = async (c) => {
+export const getReportDetails = async (req, res) => {
   try {
-    const reportId = c.req.param('id')
-    const userId = c.get('user')._id
-    const userRole = c.get('user').role
+    const reportId = req.params.id
+    const userId = req.user._id
+    const userRole = req.user.role
     
     const report = await Report.findById(reportId)
       .populate('reporterId', 'name email profilePicture')
@@ -226,39 +226,39 @@ export const getReportDetails = async (c) => {
       .populate('actionBy', 'name email')
     
     if (!report) {
-      return c.json(createError(404, 'Report not found'), 404)
+      return res.status(404).json(createError(404, 'Report not found'))
     }
     
     // Check if user is authorized to view this report
     if (userRole !== 'admin' && report.reporterId.toString() !== userId.toString()) {
-      return c.json(createError(403, 'Not authorized to view this report'), 403)
+      return res.status(403).json(createError(403, 'Not authorized to view this report'))
     }
     
-    return c.json({
+    return res.json({
       success: true,
       report
     })
   } catch (error) {
     console.error('Error getting report details:', error)
-    return c.json(createError(500, 'Error getting report details'), 500)
+    return res.status(500).json(createError(500, 'Error getting report details'))
   }
 }
 
 // Update report status (admin only)
-export const updateReportStatus = async (c) => {
+export const updateReportStatus = async (req, res) => {
   try {
-    const reportId = c.req.param('id')
-    const adminId = c.get('user')._id
-    const { status, adminNotes, actionTaken } = await c.req.json()
+    const reportId = req.params.id
+    const adminId = req.user._id
+    const { status, adminNotes, actionTaken } = req.body
     
     // Validate status
     if (!Object.values(ReportStatus).includes(status)) {
-      return c.json(createError(400, 'Invalid status'), 400)
+      return res.status(400).json(createError(400, 'Invalid status'))
     }
     
     const report = await Report.findById(reportId)
     if (!report) {
-      return c.json(createError(404, 'Report not found'), 404)
+      return res.status(404).json(createError(404, 'Report not found'))
     }
     
     // Update report
@@ -276,26 +276,26 @@ export const updateReportStatus = async (c) => {
     
     await report.save()
     
-    return c.json({
+    return res.json({
       success: true,
       message: 'Report status updated successfully',
       report
     })
   } catch (error) {
     console.error('Error updating report status:', error)
-    return c.json(createError(500, 'Error updating report status'), 500)
+    return res.status(500).json(createError(500, 'Error updating report status'))
   }
 }
 
 // Get reports by content
-export const getReportsByContent = async (c) => {
+export const getReportsByContent = async (req, res) => {
   try {
-    const contentId = c.req.param('contentId')
-    const contentType = c.req.param('contentType')
+    const contentId = req.params.contentId
+    const contentType = req.params.contentType
     
     // Validate content type
     if (!Object.values(ContentType).includes(contentType)) {
-      return c.json(createError(400, 'Invalid content type'), 400)
+      return res.status(400).json(createError(400, 'Invalid content type'))
     }
     
     const reports = await Report.find({ contentId, contentType })
@@ -303,18 +303,18 @@ export const getReportsByContent = async (c) => {
       .populate('reporterId', 'name email profilePicture')
       .populate('actionBy', 'name email')
     
-    return c.json({
+    return res.json({
       success: true,
       reports
     })
   } catch (error) {
     console.error('Error getting reports by content:', error)
-    return c.json(createError(500, 'Error getting reports by content'), 500)
+    return res.status(500).json(createError(500, 'Error getting reports by content'))
   }
 }
 
 // Get reports statistics (admin only)
-export const getReportsStats = async (c) => {
+export const getReportsStats = async (req, res) => {
   try {
     // Get reports by status
     const statusStats = await Report.aggregate([
@@ -361,7 +361,7 @@ export const getReportsStats = async (c) => {
       { $sort: { _id: 1 } }
     ])
     
-    return c.json({
+    return res.json({
       success: true,
       stats: {
         statusStats,
@@ -372,6 +372,6 @@ export const getReportsStats = async (c) => {
     })
   } catch (error) {
     console.error('Error getting reports stats:', error)
-    return c.json(createError(500, 'Error getting reports stats'), 500)
+    return res.status(500).json(createError(500, 'Error getting reports stats'))
   }
 }
