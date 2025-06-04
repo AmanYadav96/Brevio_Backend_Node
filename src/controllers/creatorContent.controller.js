@@ -580,44 +580,37 @@ export const purchaseEducationalContent = async (req, res) => {
 }
 
 // Step 1: Create basic content with metadata only
-export const createContentBasic = async (c) => {
-  // Handle both Express style (req, res) and old style (c)
-  const req = c.req || c;
-  const res = c.res || c;
-  const json = res.json ? res.json.bind(res) : c.json ? c.json.bind(c) : null;
-  
-  if (!json) {
-    console.error("API style mismatch: Neither res.json nor c.json is available");
-    return res.status ? res.status(500).send("Server error") : c.status ? c.status(500).send("Server error") : null;
-  }
-  
+export const createContentBasic = async (req, res) => {
   try {
-    // Get user from either API style
-    const user = req.user || c.get ? c.get('user') : null;
+    // Get user from request
+    const user = req.user;
     
     if (!user) {
-      return res.status ? 
-        res.status(401).json({ success: false, message: 'User not authenticated' }) : 
-        json({ success: false, message: 'User not authenticated' }, 401);
+      return res.status(401).json({ 
+        success: false, 
+        message: 'User not authenticated' 
+      });
     }
     
-    // Parse request body - handle both styles
-    const body = req.body || (c.req && c.req.json ? await c.req.json() : {});
+    // Parse request body
+    const body = req.body;
     
     // Ensure we have valid data
     if (!body || Object.keys(body).length === 0) {
-      return res.status ? 
-        res.status(400).json({ success: false, message: 'No content data provided' }) : 
-        json({ success: false, message: 'No content data provided' }, 400);
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No content data provided' 
+      });
     }
     
     console.log('Basic content data being processed:', JSON.stringify(body, null, 2));
     
     // Check if user is creator or admin
     if (user.role !== UserRole.CREATOR && user.role !== UserRole.ADMIN) {
-      return res.status ? 
-        res.status(403).json({ success: false, message: "Only creators and admins can upload content" }) : 
-        json({ success: false, message: "Only creators and admins can upload content" }, 403);
+      return res.status(403).json({ 
+        success: false, 
+        message: "Only creators and admins can upload content" 
+      });
     }
     
     // Create content with appropriate fields based on content type
@@ -639,14 +632,17 @@ export const createContentBasic = async (c) => {
     
     const content = await CreatorContent.create(contentData);
     
-    return res.status ? 
-      res.status(201).json({ success: true, content, message: "Content draft created successfully. Please upload video and media assets." }) : 
-      json({ success: true, content, message: "Content draft created successfully. Please upload video and media assets." }, 201);
+    return res.status(201).json({ 
+      success: true, 
+      content, 
+      message: "Content draft created successfully. Please upload video and media assets." 
+    });
   } catch (error) {
     console.error("Create basic content error:", error);
-    return res.status ? 
-      res.status(500).json({ success: false, message: error.message }) : 
-      json({ success: false, message: error.message }, 500);
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 };
 
