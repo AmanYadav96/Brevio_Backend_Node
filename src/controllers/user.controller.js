@@ -158,33 +158,33 @@ export const getUserProfile = async (req, res) => {
 }
 
 // Get single user (for admin)
-export const getUser = async (c) => {
+export const getUser = async (req, res) => {
   try {
-    const userId = c.req.param('id')
+    const userId = req.params.id
     
     const user = await User.findById(userId).select('-password')
     if (!user) {
       throw new AppError("User not found", 404)
     }
 
-    return c.json({
+    return res.json({
       success: true,
       user
     })
   } catch (error) {
     if (error instanceof AppError) {
-      return c.json({ success: false, message: error.message }, error.statusCode)
+      return res.status(error.statusCode).json({ success: false, message: error.message })
     }
     console.error("Get user error:", error)
-    return c.json({ success: false, message: "Failed to fetch user" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to fetch user" })
   }
 }
 
 // Update user (for admin)
-export const updateUser = async (c) => {
+export const updateUser = async (req, res) => {
   try {
-    const userId = c.req.param('id')
-    const updates = await c.req.json()
+    const userId = req.params._id
+    const updates = req.body
     
     // Prevent updating sensitive fields
     delete updates.password
@@ -201,51 +201,51 @@ export const updateUser = async (c) => {
       throw new AppError("User not found", 404)
     }
 
-    return c.json({
+    return res.json({
       success: true,
       user
     })
   } catch (error) {
     if (error instanceof AppError) {
-      return c.json({ success: false, message: error.message }, error.statusCode)
+      return res.status(error.statusCode).json({ success: false, message: error.message })
     }
     console.error("Update user error:", error)
-    return c.json({ success: false, message: "Failed to update user" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to update user" })
   }
 }
 
 // Delete user (for admin)
-export const deleteUser = async (c) => {
+export const deleteUser = async (req, res) => {
   try {
-    const userId = c.req.param('id')
+    const userId = req.params.id
     
     const user = await User.findByIdAndDelete(userId)
     if (!user) {
       throw new AppError("User not found", 404)
     }
 
-    return c.json({
+    return res.json({
       success: true,
       message: "User deleted successfully"
     })
   } catch (error) {
     if (error instanceof AppError) {
-      return c.json({ success: false, message: error.message }, error.statusCode)
+      return res.status(error.statusCode).json({ success: false, message: error.message })
     }
     console.error("Delete user error:", error)
-    return c.json({ success: false, message: "Failed to delete user" }, 500)
+    return res.status(500).json({ success: false, message: "Failed to delete user" })
   }
 }
 
 // Get user stats (for admin)
-export const getUserStats = async (c) => {
+export const getUserStats = async (req, res) => {
   try {
     const totalUsers = await User.countDocuments()
     const creators = await User.countDocuments({ role: 'creator' })
     const viewers = await User.countDocuments({ role: 'viewer' })
     const verifiedUsers = await User.countDocuments({ isEmailVerified: true })
 
-    return c.json({
+    return res.json({
       success: true,
       stats: {
         totalUsers,
@@ -256,6 +256,5 @@ export const getUserStats = async (c) => {
     })
   } catch (error) {
     console.error("Get user stats error:", error)
-    return c.json({ success: false, message: "Failed to fetch user statistics" }, 500)
-  }
-}
+    return res.status(500).json({ success: false, message: "Failed to fetch user statistics" })
+  }}
