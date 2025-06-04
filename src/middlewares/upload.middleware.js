@@ -191,7 +191,7 @@ export const handleUpload = (type) => {
       // Only process if content type is multipart/form-data
       if (contentType.includes('multipart/form-data')) {
         try {
-          // Use formidable for more robust form parsing
+          // Use formidable for more robust form parsing with increased timeout
           const form = formidable({
             maxFileSize: maxFileSize.video, // Set to max video size
             multiples: true,
@@ -199,13 +199,43 @@ export const handleUpload = (type) => {
             uploadDir: tempDir,
             allowEmptyFiles: false,
             maxFields: 20,
-            maxFieldsSize: 1 * 1024 * 1024, // 1MB for text fields
+            maxFieldsSize: 1 * 1024 * 1024, // 1MB for text fields,
+            // Increase timeout to 30 minutes to prevent request aborted errors
+            timeout: 30 * 60 * 1000
+          });
+          
+          // Add progress tracking to detect stalled uploads
+          let lastProgress = 0;
+          let lastProgressTime = Date.now();
+          
+          form.on('progress', (bytesReceived, bytesExpected) => {
+            const progress = Math.floor((bytesReceived / bytesExpected) * 100);
+            
+            // Only log when progress increases by at least 5%
+            if (progress >= lastProgress + 5) {
+              console.log(`Upload progress: ${progress}%`);
+              lastProgress = progress;
+              lastProgressTime = Date.now();
+            } else if (Date.now() - lastProgressTime > 60000) {
+              // Log if no progress for more than a minute
+              console.log(`Upload stalled at ${progress}%`);
+              lastProgressTime = Date.now();
+            }
           });
           
           // Parse the form using the Express request object
           const [fields, files] = await new Promise((resolve, reject) => {
             form.parse(req, (err, fields, files) => {
-              if (err) return reject(err);
+              if (err) {
+                console.error('Form parsing error:', err);
+                // Check for specific error types
+                if (err.code === 1009) { // Request aborted
+                  return reject(new Error('Upload request was aborted. Please try again with a chunked upload.'));
+                } else if (err.code === 1012) { // Timeout
+                  return reject(new Error('Upload timed out. Please try again with a chunked upload.'));
+                }
+                return reject(err);
+              }
               resolve([fields, files]);
             });
           })
@@ -423,7 +453,10 @@ export const handleUpload = (type) => {
           console.error('Error parsing form data:', parseError);
           return res.status(400).json({ 
             success: false, 
-            message: `Error parsing form data: ${parseError.message}` 
+            message: `Error parsing form data: ${parseError.message}`,
+            error: parseError.name,
+            code: parseError.code || 'UNKNOWN',
+            shouldUseChunkedUpload: parseError.message.includes('aborted') || parseError.message.includes('timeout')
           });
         }
       } else {
@@ -583,17 +616,21 @@ async function handleChunkUpload(req, fileId, chunkIndex, totalChunks) {
       };
     }
     
-    // Parse the form
+    // Parse the form with increased timeout
     const form = formidable({
-      maxFileSize: 10 * 1024 * 1024, // 10MB per chunk
+      maxFileSize: 20 * 1024 * 1024, // 20MB per chunk
       multiples: false,
       keepExtensions: true,
       uploadDir: tempDir,
+      timeout: 5 * 60 * 1000 // 5 minute timeout per chunk
     });
     
     const [_, files] = await new Promise((resolve, reject) => {
       form.parse(req, (err, fields, files) => {
-        if (err) return reject(err);
+        if (err) {
+          console.error('Chunk parsing error:', err);
+          return reject(err);
+        }
         resolve([fields, files]);
       });
     });
@@ -617,18 +654,35 @@ async function handleChunkUpload(req, fileId, chunkIndex, totalChunks) {
       }
     });
     
-    // Upload the chunk
-    const fileBuffer = fs.readFileSync(chunkFile.filepath);
+    // Upload the chunk with retry logic
+    let attempts = 0;
+    const maxAttempts = 3;
+    let uploadSuccess = false;
+    let ETag;
     
-    const uploadPartCommand = new UploadPartCommand({
-      Bucket: process.env.R2_BUCKET_NAME,
-      Key: fileUpload.uploadPath,
-      UploadId: fileUpload.uploadId,
-      PartNumber: chunkIndex + 1,
-      Body: fileBuffer
-    });
-    
-    const { ETag } = await s3Client.send(uploadPartCommand);
+    while (attempts < maxAttempts && !uploadSuccess) {
+      try {
+        attempts++;
+        const fileBuffer = fs.readFileSync(chunkFile.filepath);
+        
+        const uploadPartCommand = new UploadPartCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: fileUpload.uploadPath,
+          UploadId: fileUpload.uploadId,
+          PartNumber: chunkIndex + 1,
+          Body: fileBuffer
+        });
+        
+        const result = await s3Client.send(uploadPartCommand);
+        ETag = result.ETag;
+        uploadSuccess = true;
+      } catch (uploadError) {
+        console.error(`Chunk upload attempt ${attempts} failed:`, uploadError);
+        if (attempts >= maxAttempts) throw uploadError;
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+      }
+    }
     
     // Update progress
     const progress = Math.round(((chunkIndex + 1) / totalChunks) * 100);
