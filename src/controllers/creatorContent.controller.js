@@ -103,63 +103,48 @@ export const createContent = async (req, res) => {
 }
 
 // Add episode to series
-export const addEpisode = async (c) => {
+export const addEpisode = async (req, res) => {
   try {
-    const user = c.get('user')
-    const uploads = c.get('uploads') || {}
-    const { contentId, seasonId } = c.req.param()
+    const user = req.user
+    const uploads = req.uploads || {}
+    const { contentId, seasonId } = req.params
     
-    // Try to parse body with fallback
-    let body
-    try {
-      // Try to parse as JSON first
-      body = await c.req.json()
-    } catch (jsonError) {
-      try {
-        // If JSON parsing fails, try to parse as FormData
-        body = await c.req.parseBody()
-      } catch (formError) {
-        console.error('Failed to parse request body:', jsonError, formError)
-        return c.json({
-          success: false,
-          message: 'Failed to parse request body. Please ensure you are sending valid JSON or FormData.'
-        }, 400)
-      }
-    }
+    // Get body data
+    const body = req.body
     
     // Find content and verify ownership
     const content = await CreatorContent.findById(contentId)
     
     if (!content) {
-      return c.json({ 
+      return res.status(404).json({ 
         success: false, 
         message: "Content not found" 
-      }, 404)
+      })
     }
     
     // Check if user is creator or admin
     if (!content.creator.equals(user._id) && user.role !== UserRole.ADMIN) {
-      return c.json({ 
+      return res.status(403).json({ 
         success: false, 
         message: "You don't have permission to modify this content" 
-      }, 403)
+      })
     }
     
     // Verify content type is series
     if (content.contentType !== ContentType.SERIES) {
-      return c.json({ 
+      return res.status(400).json({ 
         success: false, 
         message: "This operation is only valid for series content" 
-      }, 400)
+      })
     }
     
     // Find the season
     const season = content.seasons.id(seasonId)
     if (!season) {
-      return c.json({ 
+      return res.status(404).json({ 
         success: false, 
         message: "Season not found" 
-      }, 404)
+      })
     }
     
     // Process video metadata for orientation validation
@@ -171,10 +156,10 @@ export const addEpisode = async (c) => {
       try {
         videoProcessorService.validateOrientation(videoMetadata, content.orientation)
       } catch (error) {
-        return c.json({ 
+        return res.status(400).json({ 
           success: false, 
           message: error.message 
-        }, 400)
+        })
       }
     }
     
@@ -197,69 +182,54 @@ export const addEpisode = async (c) => {
     
     await content.save()
     
-    return c.json({ 
+    return res.json({ 
       success: true, 
       episode: season.episodes[season.episodes.length - 1],
       message: "Episode added successfully"
     })
   } catch (error) {
     console.error("Add episode error:", error)
-    return c.json({ 
+    return res.status(500).json({ 
       success: false, 
       message: error.message 
-    }, 500)
+    })
   }
 }
 
 // Add lesson to educational content
-export const addLesson = async (c) => {
+export const addLesson = async (req, res) => {
   try {
-    const user = c.get('user')
-    const uploads = c.get('uploads') || {}
-    const { contentId } = c.req.param()
+    const user = req.user
+    const uploads = req.uploads || {}
+    const { contentId } = req.params
     
-    // Try to parse body with fallback
-    let body
-    try {
-      // Try to parse as JSON first
-      body = await c.req.json()
-    } catch (jsonError) {
-      try {
-        // If JSON parsing fails, try to parse as FormData
-        body = await c.req.parseBody()
-      } catch (formError) {
-        console.error('Failed to parse request body:', jsonError, formError)
-        return c.json({
-          success: false,
-          message: 'Failed to parse request body. Please ensure you are sending valid JSON or FormData.'
-        }, 400)
-      }
-    }
+    // Get body data
+    const body = req.body
     
     // Find content and verify ownership
     const content = await CreatorContent.findById(contentId)
     
     if (!content) {
-      return c.json({ 
+      return res.status(404).json({ 
         success: false, 
         message: "Content not found" 
-      }, 404)
+      })
     }
     
     // Check if user is creator or admin
     if (!content.creator.equals(user._id) && user.role !== UserRole.ADMIN) {
-      return c.json({ 
+      return res.status(403).json({ 
         success: false, 
         message: "You don't have permission to modify this content" 
-      }, 403)
+      })
     }
     
     // Verify content type is educational
     if (content.contentType !== ContentType.EDUCATIONAL) {
-      return c.json({ 
+      return res.status(400).json({ 
         success: false, 
         message: "This operation is only valid for educational content" 
-      }, 400)
+      })
     }
     
     // Process video metadata for orientation validation
@@ -271,10 +241,10 @@ export const addLesson = async (c) => {
       try {
         videoProcessorService.validateOrientation(videoMetadata, content.orientation)
       } catch (error) {
-        return c.json({ 
+        return res.status(400).json({ 
           success: false, 
           message: error.message 
-        }, 400)
+        })
       }
     }
     
@@ -298,32 +268,32 @@ export const addLesson = async (c) => {
     
     await content.save()
     
-    return c.json({ 
+    return res.json({ 
       success: true, 
       lesson: content.lessons[content.lessons.length - 1],
       message: "Lesson added successfully"
     })
   } catch (error) {
     console.error("Add lesson error:", error)
-    return c.json({ 
+    return res.status(500).json({ 
       success: false, 
       message: error.message 
-    }, 500)
+    })
   }
 }
 
 // Admin approve content
-export const approveContent = async (c) => {
+export const approveContent = async (req, res) => {
   try {
-    const user = c.get('user')
-    const { contentId } = c.req.param()
+    const user = req.user
+    const { contentId } = req.params
     
     // Check if user is admin
     if (user.role !== UserRole.ADMIN) {
-      return c.json({ 
+      return res.status(403).json({ 
         success: false, 
         message: "Only admins can approve content" 
-      }, 403)
+      })
     }
     
     // Find and update content
@@ -337,10 +307,10 @@ export const approveContent = async (c) => {
     ).populate('creator', 'name email');
     
     if (!content) {
-      return c.json({ 
+      return res.status(404).json({ 
         success: false, 
         message: "Content not found" 
-      }, 404)
+      })
     }
     
     // Send approval email to creator
@@ -361,33 +331,33 @@ export const approveContent = async (c) => {
       console.error("Error sending content approval email:", emailError);
     }
     
-    return c.json({ 
+    return res.json({ 
       success: true, 
       content,
       message: "Content approved and published successfully"
     })
   } catch (error) {
     console.error("Approve content error:", error)
-    return c.json({ 
+    return res.status(500).json({ 
       success: false, 
       message: error.message 
-    }, 500)
+    })
   }
 }
 
 // Admin reject content
-export const rejectContent = async (c) => {
+export const rejectContent = async (req, res) => {
   try {
-    const user = c.get('user')
-    const { contentId } = c.req.param()
-    const { reason } = await c.req.json()
+    const user = req.user
+    const { contentId } = req.params
+    const { reason } = req.body
     
     // Check if user is admin
     if (user.role !== UserRole.ADMIN) {
-      return c.json({ 
+      return res.status(403).json({ 
         success: false, 
         message: "Only admins can reject content" 
-      }, 403)
+      })
     }
     
     // Find and update content
@@ -402,10 +372,10 @@ export const rejectContent = async (c) => {
     ).populate('creator', 'name email');
     
     if (!content) {
-      return c.json({ 
+      return res.status(404).json({ 
         success: false, 
         message: "Content not found" 
-      }, 404)
+      })
     }
     
     // Send rejection email to creator
@@ -427,46 +397,46 @@ export const rejectContent = async (c) => {
       console.error("Error sending content rejection email:", emailError);
     }
     
-    return c.json({ 
+    return res.json({ 
       success: true, 
       content,
       message: "Content rejected successfully"
     })
   } catch (error) {
     console.error("Reject content error:", error)
-    return c.json({ 
+    return res.status(500).json({ 
       success: false, 
       message: error.message 
-    }, 500)
+    })
   }
 }
 
 // Get content by ID
-export const getContentById = async (c) => {
+export const getContentById = async (req, res) => {
   try {
-    const { contentId } = c.req.param()
+    const { contentId } = req.params
     
     const content = await CreatorContent.findById(contentId)
       .populate('creator', 'name username profilePicture')
       // Removed the genres population since it's not in the schema
     
     if (!content) {
-      return c.json({ 
+      return res.status(404).json({ 
         success: false, 
         message: "Content not found" 
-      }, 404)
+      })
     }
     
-    return c.json({ 
+    return res.json({ 
       success: true, 
       content
     })
   } catch (error) {
     console.error("Get content error:", error)
-    return c.json({ 
+    return res.status(500).json({ 
       success: false, 
       message: error.message 
-    }, 500)
+    })
   }
 }
 
@@ -553,34 +523,34 @@ export const purchaseEducationalContent = async (req, res) => {
     const content = await CreatorContent.findById(contentId)
     
     if (!content) {
-      return c.json({ 
+      return res.status(404).json({ 
         success: false, 
         message: "Content not found" 
-      }, 404)
+      })
     }
     
     // Verify content type is educational
     if (content.contentType !== ContentType.EDUCATIONAL) {
-      return c.json({ 
+      return res.status(400).json({ 
         success: false, 
         message: "This operation is only valid for educational content" 
-      }, 400)
+      })
     }
     
     // Verify content is published
     if (content.status !== 'published') {
-      return c.json({ 
+      return res.status(400).json({ 
         success: false, 
         message: "This content is not available for purchase" 
-      }, 400)
+      })
     }
     
     // Check if content is paid
     if (content.pricing.model !== PricingModel.PAID) {
-      return c.json({ 
+      return res.status(400).json({ 
         success: false, 
         message: "This content is not available for purchase" 
-      }, 400)
+      })
     }
     
     // TODO: Implement payment processing logic here
@@ -590,7 +560,7 @@ export const purchaseEducationalContent = async (req, res) => {
     // 3. Recording the purchase in a purchases collection
     
     // For now, we'll just return a success message
-    return c.json({ 
+    return res.json({ 
       success: true, 
       message: "Purchase flow initiated",
       content: {
@@ -610,29 +580,29 @@ export const purchaseEducationalContent = async (req, res) => {
 }
 
 // Step 1: Create basic content with metadata only
-export const createContentBasic = async (c) => {
+export const createContentBasic = async (req, res) => {
   try {
-    const user = c.get('user')
+    const user = req.user
     
     // Parse request body
-    const body = await c.req.json()
+    const body = req.body
     
     // Ensure we have valid data
     if (!body || Object.keys(body).length === 0) {
-      return c.json({
+      return res.status(400).json({
         success: false,
         message: 'No content data provided'
-      }, 400)
+      })
     }
     
     console.log('Basic content data being processed:', JSON.stringify(body, null, 2))
     
     // Check if user is creator or admin
     if (user.role !== UserRole.CREATOR && user.role !== UserRole.ADMIN) {
-      return c.json({ 
+      return res.status(403).json({ 
         success: false,
         message: "Only creators and admins can upload content"
-      }, 403)
+      })
     }
     
     // Create content with appropriate fields based on content type
@@ -654,17 +624,17 @@ export const createContentBasic = async (c) => {
     
     const content = await CreatorContent.create(contentData)
     
-    return c.json({ 
+    return res.status(201).json({ 
       success: true,
       content,
       message: "Content draft created successfully. Please upload video and media assets."
-    }, 201)
+    })
   } catch (error) {
     console.error("Create basic content error:", error)
-    return c.json({ 
+    return res.status(500).json({ 
       success: false,
       message: error.message
-    }, 500)
+    })
   }
 }
 
@@ -751,29 +721,29 @@ export const uploadMainVideo = async (req, res) => {
 }
 
 // Step 3: Upload media assets
-export const uploadMediaAssets = async (c) => {
+export const uploadMediaAssets = async (req, res) => {
   try {
-    const user = c.get('user')
-    const uploads = c.get('uploads') || {}
-    const fileUploads = c.get('fileUploads') || []
-    const { contentId } = c.req.param()
+    const user = req.user
+    const uploads = req.uploads || {}
+    const fileUploads = req.fileUploads || []
+    const { contentId } = req.params
     
     // Find content and verify ownership
     const content = await CreatorContent.findById(contentId)
     
     if (!content) {
-      return c.json({ 
+      return res.status(404).json({ 
         success: false, 
         message: "Content not found" 
-      }, 404)
+      })
     }
     
     // Check if user is creator or admin
     if (!content.creator.equals(user._id) && user.role !== UserRole.ADMIN) {
-      return c.json({ 
+      return res.status(403).json({ 
         success: false, 
         message: "You don't have permission to modify this content" 
-      }, 403)
+      })
     }
     
     // Update media assets
@@ -834,7 +804,7 @@ export const uploadMediaAssets = async (c) => {
       }
     }
     
-    return c.json({ 
+    return res.json({ 
       success: true, 
       content,
       fileUploads,
@@ -842,9 +812,9 @@ export const uploadMediaAssets = async (c) => {
     })
   } catch (error) {
     console.error("Upload media assets error:", error)
-    return c.json({ 
+    return res.status(500).json({ 
       success: false, 
       message: error.message 
-    }, 500)
+    })
   }
 }
