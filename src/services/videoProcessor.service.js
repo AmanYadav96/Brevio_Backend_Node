@@ -34,14 +34,51 @@ export class VideoProcessorService {
               return reject(new Error('No video stream found'))
             }
             
-            const width = videoStream.width
-            const height = videoStream.height
-            const aspectRatio = width / height
+            // Get dimensions and consider rotation metadata
+            let width = videoStream.width
+            let height = videoStream.height
             
-            // Calculate orientation
+            // Check for rotation metadata - improved detection
+            let rotation = null
+            if (videoStream.tags) {
+              rotation = videoStream.tags.rotate || videoStream.tags.rotation
+            }
+            
+            // Also check side_data_list for rotation information
+            if (!rotation && videoStream.side_data_list && videoStream.side_data_list.length > 0) {
+              const rotationData = videoStream.side_data_list.find(data => data.rotation !== undefined)
+              if (rotationData) {
+                rotation = rotationData.rotation
+              }
+            }
+            
+            // Log all metadata for debugging
+            console.log('Video metadata:', JSON.stringify({
+              dimensions: `${width}x${height}`,
+              tags: videoStream.tags,
+              side_data: videoStream.side_data_list,
+              detected_rotation: rotation
+            }, null, 2))
+            
+            // If rotation is 90 or 270 degrees, swap width and height
+            if (rotation && (
+                rotation === '90' || rotation === '270' || 
+                rotation === 90 || rotation === 270 ||
+                rotation === '-90' || rotation === '-270' ||
+                rotation === -90 || rotation === -270
+            )) {
+              console.log(`Swapping dimensions due to ${rotation}° rotation`)
+              const temp = width
+              width = height
+              height = temp
+            }
+            
+            const aspectRatio = width / height
+            console.log(`Final dimensions: ${width}x${height}, Aspect ratio: ${aspectRatio}, Rotation: ${rotation || 'none'}`)
+            
+            // Simplified orientation detection
             let orientation
-            if (aspectRatio < 1 || (width === height && width <= 1080)) {
-              // If width < height or it's a square video with mobile dimensions
+            if (aspectRatio < 1) {
               orientation = OrientationType.VERTICAL
             } else {
               orientation = OrientationType.HORIZONTAL
@@ -54,7 +91,8 @@ export class VideoProcessorService {
               orientation,
               format: videoStream.codec_name,
               duration: metadata.format.duration,
-              bitrate: metadata.format.bit_rate
+              bitrate: metadata.format.bit_rate,
+              rotation: rotation || 'none'
             })
           } catch (error) {
             reject(error)
