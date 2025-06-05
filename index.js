@@ -32,6 +32,7 @@ import creatorContentRoutes from "./src/routes/creatorContent.routes.js";
 import channelSubscriptionRoutes from "./src/routes/channelSubscription.routes.js";
 import sliderRoutes from "./src/routes/slider.routes.js";
 import categoryRoutes from "./src/routes/category.routes.js";
+import videoViewRoutes from "./src/routes/videoView.routes.js"
 import { errorHandler } from "./src/middlewares/error.middleware.js";
 
 const app = express();
@@ -103,7 +104,7 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/donations", donationRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/contracts", contractRoutes);
-
+app.use("/api/views", videoViewRoutes)
 // Health check route
 app.get("/", (req, res) => res.json({ status: "Server is running" }));
 
