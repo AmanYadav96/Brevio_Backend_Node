@@ -688,7 +688,10 @@ export const uploadMainVideo = async (req, res) => {
     // Process video metadata for orientation validation
     let videoMetadata = {}
     if (content.contentType === ContentType.SHORT_FILM && uploads.videoFile) {
-      videoMetadata = await videoProcessorService.detectOrientation(uploads.videoFile)
+      // Change this line:
+      // videoMetadata = await videoProcessorService.detectOrientation(uploads.videoFile)
+      // To this:
+      videoMetadata = await videoProcessorService.detectOrientation(uploads.videoFile.url.trim())
       
       // Validate orientation
       try {
@@ -702,9 +705,10 @@ export const uploadMainVideo = async (req, res) => {
     }
     
     // Update content with video URL and metadata
-    content.videoUrl = uploads.videoFile;
+    content.videoUrl = uploads.videoFile.url.trim();
     content.duration = videoMetadata.duration || content.duration;
     content.videoMetadata = videoMetadata;
+    content.duration = videoMetadata.duration || content.duration;
     
     // Update status if all required fields are present
     if (content.title && content.description && content.videoUrl) {

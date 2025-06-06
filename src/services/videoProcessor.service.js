@@ -57,7 +57,8 @@ export class VideoProcessorService {
               dimensions: `${width}x${height}`,
               tags: videoStream.tags,
               side_data: videoStream.side_data_list,
-              detected_rotation: rotation
+              detected_rotation: rotation,
+              duration: metadata.format.duration
             }, null, 2))
             
             // If rotation is 90 or 270 degrees, swap width and height
@@ -74,7 +75,7 @@ export class VideoProcessorService {
             }
             
             const aspectRatio = width / height
-            console.log(`Final dimensions: ${width}x${height}, Aspect ratio: ${aspectRatio}, Rotation: ${rotation || 'none'}`)
+            console.log(`Final dimensions: ${width}x${height}, Aspect ratio: ${aspectRatio}, Rotation: ${rotation || 'none'}, Duration: ${metadata.format.duration}s`)
             
             // Simplified orientation detection
             let orientation
@@ -90,7 +91,7 @@ export class VideoProcessorService {
               aspectRatio: aspectRatio.toFixed(2),
               orientation,
               format: videoStream.codec_name,
-              duration: metadata.format.duration,
+              duration: metadata.format.duration || 0,
               bitrate: metadata.format.bit_rate,
               rotation: rotation || 'none'
             })

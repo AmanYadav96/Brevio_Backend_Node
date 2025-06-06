@@ -1,4 +1,5 @@
 import { Server } from 'socket.io';
+import FileUpload from '../models/fileUpload.model.js';
 
 class SocketService {
   constructor() {
@@ -78,8 +79,15 @@ class SocketService {
   }
 
   // Emit upload status with detailed information
+  // Emit upload status with detailed information
   emitUploadStatus(userId, fileId, status, progress, details = {}) {
     if (!this.io) return;
+    
+    // Add console logging for upload progress
+    console.log(`Upload progress for file ${fileId}: ${progress}% (${status})`, 
+      details.uploadedBytes && details.totalBytes ? 
+      `${Math.round(details.uploadedBytes / 1024 / 1024 * 100) / 100}MB / ${Math.round(details.totalBytes / 1024 / 1024 * 100) / 100}MB` : 
+      '');
     
     this.io.to(`upload-${userId}`).emit('upload-status', {
       fileId,
@@ -91,13 +99,59 @@ class SocketService {
   }
 
   // Emit upload progress to specific user
+  // Enhance the emitUploadProgress method to include more details
+  // Emit upload progress to specific user
   emitUploadProgress(userId, fileId, progress) {
     if (!this.io) return;
     
-    this.io.to(`upload-${userId}`).emit('upload-progress', {
-      fileId,
-      progress
-    });
+    // Add console logging for regular upload progress
+    console.log(`Regular upload progress for file ${fileId}: ${progress}%`);
+    
+    // Try to get the file upload record for more details
+    FileUpload.findById(fileId)
+      .then(fileUpload => {
+        if (fileUpload) {
+          const uploadedBytes = Math.round((progress / 100) * fileUpload.fileSize);
+          const elapsed = (Date.now() - new Date(fileUpload.createdAt).getTime()) / 1000; // seconds
+          let speed = 0;
+          let remainingTime = 0;
+          
+          if (elapsed > 0) {
+            speed = uploadedBytes / elapsed; // bytes per second
+            remainingTime = Math.round((fileUpload.fileSize - uploadedBytes) / speed); // seconds
+          }
+          
+          // Log detailed progress information
+          console.log(`Upload details for ${fileUpload.fileName}: ${Math.round(uploadedBytes / 1024 / 1024 * 100) / 100}MB / ${Math.round(fileUpload.fileSize / 1024 / 1024 * 100) / 100}MB, Speed: ${Math.round(speed / 1024)}KB/s, Remaining: ${remainingTime}s`);
+          
+          this.emitUploadStatus(
+            userId, 
+            fileId, 
+            fileUpload.status, 
+            progress, 
+            {
+              uploadedBytes: uploadedBytes,
+              totalBytes: fileUpload.fileSize,
+              speed: Math.round(speed / 1024), // KB/s
+              remainingTime: remainingTime
+            }
+          );
+        } else {
+          // Fallback to basic progress update if file record not found
+          this.io.to(`upload-${userId}`).emit('upload-progress', {
+            fileId,
+            progress
+          });
+        }
+      })
+      .catch(err => {
+        console.error('Error getting file upload details:', err);
+        // Fallback to basic progress update
+        this.io.to(`upload-${userId}`).emit('upload-progress', {
+          fileId,
+          progress
+        });
+      });
   }
 
   // Emit upload completion to specific user

@@ -1,7 +1,7 @@
 export const validateFileSize = (options) => async (req, res, next) => {
   try {
     // Express doesn't have built-in formData parsing like Hono
-    // The form data will be available through multer or formidable middleware
+    // The form data will be available through multer middleware
     // We'll check the files that have been attached to the request by previous middleware
     
     // Video file validation (500MB limit)

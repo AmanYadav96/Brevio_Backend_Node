@@ -11,7 +11,7 @@ import {
   AbortMultipartUploadCommand
 } from '@aws-sdk/client-s3'
 import { getVideoDurationInSeconds } from 'get-video-duration'
-import formidable from 'formidable'
+import multer from 'multer'
 import FileUpload from '../models/fileUpload.model.js'
 import socketService from '../services/socket.service.js'
 
@@ -61,6 +61,90 @@ const getTempDirectory = () => {
 // Get temp directory
 const tempDir = getTempDirectory()
 
+// Configure multer storage
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, tempDir)
+  },
+  filename: function (req, file, cb) {
+    // Create a unique filename with original extension
+    const originalExt = path.extname(file.originalname)
+    const filename = `${Date.now()}_${uuidv4()}${originalExt}`
+    cb(null, filename)
+  }
+})
+
+// File filter function to validate file types
+const fileFilter = (req, file, cb) => {
+  // Check if it's a video file
+  if (file.fieldname === 'videoFile' || file.fieldname === 'video' || file.fieldname === 'trailer') {
+    if (allowedVideoTypes.includes(file.mimetype)) {
+      cb(null, true) // Accept file
+    } else {
+      cb(new Error(`Invalid video format. Allowed types: ${allowedVideoTypes.join(', ')}`), false)
+    }
+  } 
+  // Check if it's an image file
+  else if (['thumbnail', 'logo', 'banner', 'verticalBanner', 'horizontalBanner'].includes(file.fieldname)) {
+    if (allowedImageTypes.includes(file.mimetype)) {
+      cb(null, true) // Accept file
+    } else {
+      cb(new Error(`Invalid image format for ${file.fieldname}. Allowed types: ${allowedImageTypes.join(', ')}`), false)
+    }
+  } 
+  // Accept other files
+  else {
+    cb(null, true)
+  }
+}
+
+// Function to upload file to cloud storage
+async function uploadToCloudStorage(filePath, originalName, mimeType, folder, userId) {
+  // Create a unique filename
+  const fileExtension = path.extname(originalName);
+  const fileName = `${folder}/${uuidv4()}${fileExtension}`;
+  
+  // Set up S3 client for R2
+  const s3Client = new S3Client({
+    region: 'auto',
+    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+    }
+  });
+  
+  // Read file
+  const fileBuffer = fs.readFileSync(filePath);
+  
+  // Create upload command
+  const command = new PutObjectCommand({
+    Bucket: process.env.R2_BUCKET_NAME,
+    Key: fileName,
+    Body: fileBuffer,
+    ContentType: mimeType
+  });
+  
+  // Upload to R2
+  await s3Client.send(command);
+  
+  // Return the URL
+  return {
+    url: `${R2_PUBLIC_URL}/${fileName}`,
+    path: fileName
+  };
+}
+
+// Create multer upload instance with size limits
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 500 * 1024 * 1024, // 500MB limit for all files
+    files: 10 // Maximum 10 files per request
+  },
+  fileFilter: fileFilter
+})
+
 // Upload type configurations
 export const uploadTypes = {
   CHANNEL: {
@@ -89,6 +173,7 @@ export const uploadTypes = {
     folder: 'creator-content',
     fields: [
       'videoFile', 
+      'video', // Add this line to accept both field names
       'thumbnail',
       'verticalBanner', 
       'horizontalBanner', 
@@ -148,7 +233,7 @@ export const handleUpload = (type) => {
       const fileId = url.searchParams.get('fileId');
       
       // Handle chunked upload if action is specified
-      if (action && contentType.includes('multipart/form-data')) {
+      if (action) {
         let result;
         
         switch (action) {
@@ -188,279 +273,299 @@ export const handleUpload = (type) => {
         }
       }
       
-      // Only process if content type is multipart/form-data
-      if (contentType.includes('multipart/form-data')) {
-        try {
-          // Use formidable for more robust form parsing with increased timeout
-          const form = formidable({
-            maxFileSize: 500 * 1024 * 1024, // 500 MB
-            multiples: true,
-            keepExtensions: true,
-            uploadDir: tempDir,
-            allowEmptyFiles: false,
-            maxFields: 20,
-            maxFieldsSize: 1 * 1024 * 1024, // 1MB for text fields
-          });
-          
-          // Add progress tracking to detect stalled uploads
-          let lastProgress = 0;
-          let lastProgressTime = Date.now();
-          
-          form.on('progress', (bytesReceived, bytesExpected) => {
-            const progress = Math.floor((bytesReceived / bytesExpected) * 100);
-            
-            // Only log when progress increases by at least 5%
-            if (progress >= lastProgress + 5) {
-              console.log(`Upload progress: ${progress}%`);
-              lastProgress = progress;
-              lastProgressTime = Date.now();
-            } else if (Date.now() - lastProgressTime > 60000) {
-              // Log if no progress for more than a minute
-              console.log(`Upload stalled at ${progress}%`);
-              lastProgressTime = Date.now();
+      // Use multer to handle the file uploads
+      const multerUpload = upload.fields(
+        uploadConfig.fields.map(field => ({ name: field, maxCount: 1 }))
+      );
+      
+      multerUpload(req, res, async (err) => {
+        if (err) {
+          console.error('Multer error:', err);
+          if (err instanceof multer.MulterError) {
+            // A Multer error occurred when uploading
+            if (err.code === 'LIMIT_FILE_SIZE') {
+              return res.status(400).json({
+                success: false,
+                message: 'File too large. Maximum size: 500MB'
+              });
             }
-          });
-          
-          // Parse the form using the Express request object
-          const [fields, files] = await new Promise((resolve, reject) => {
-            form.parse(req, (err, fields, files) => {
-              if (err) {
-                console.error('Form parsing error:', err);
-                // Check for specific error types
-                if (err.code === 1009) { // Request aborted
-                  return reject(new Error('Upload request was aborted. Please try again with a chunked upload.'));
-                } else if (err.code === 1012) { // Timeout
-                  return reject(new Error('Upload timed out. Please try again with a chunked upload.'));
-                }
-                return reject(err);
-              }
-              resolve([fields, files]);
+            return res.status(400).json({
+              success: false,
+              message: `Upload error: ${err.message}`
             });
-          })
-          
-          // Process fields
-          for (const [key, value] of Object.entries(fields)) {
-            // Handle regular form fields
-            try {
-              // Try to parse as JSON if possible
-              if (typeof value === 'string' && 
-                  ((value.startsWith('{') && value.endsWith('}')) || 
-                  (value.startsWith('[') && value.endsWith(']')))) {
-                try {
-                  body[key] = JSON.parse(value);
-                } catch (jsonError) {
-                  body[key] = value;
-                }
-              } else {
-                body[key] = value;
-              }
-            } catch (e) {
-              body[key] = value;
-            }
           }
-          
-          // Process files
-          for (const [key, fileInfo] of Object.entries(files)) {
-            const file = Array.isArray(fileInfo) ? fileInfo[0] : fileInfo;
+          return res.status(400).json({
+            success: false,
+            message: err.message
+          });
+        }
+        
+        // Initialize uploads object
+        const uploads = {};
+        
+        // Process uploaded files
+        if (req.files) {
+          for (const [fieldName, files] of Object.entries(req.files)) {
+            const file = files[0]; // Get the first file for each field
             
             if (!file) continue;
             
-            // Handle file uploads
-            if (uploadConfig.fields.includes(key) || (key === 'video' && uploadConfig.fields.includes('videoFile'))) {
-              // Validate file type for videos
-              const isVideo = key === 'video' || key === 'videoFile' || key === 'trailer';
+            // Determine if this is a video file
+            const isVideo = fieldName === 'videoFile' || fieldName === 'video' || fieldName === 'trailer';
+            
+            try {
+              // Create a unique filename
+              const fileExtension = path.extname(file.originalname);
+              const fileName = `${uploadConfig.folder}/${uuidv4()}${fileExtension}`;
               
-              if (isVideo && !allowedVideoTypes.includes(file.mimetype)) {
-                return c.json({
-                  success: false,
-                  message: `Invalid video format. Allowed types: ${allowedVideoTypes.join(', ')}`
-                }, 400);
-              }
+              // Set up S3 client for R2
+              const s3Client = new S3Client({
+                region: 'auto',
+                endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+                credentials: {
+                  accessKeyId: process.env.R2_ACCESS_KEY_ID,
+                  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+                }
+              });
               
-              // Validate file type for images
-              if (['thumbnail', 'logo', 'banner', 'verticalBanner', 'horizontalBanner'].includes(key) && 
-                  !allowedImageTypes.includes(file.mimetype)) {
-                return c.json({
-                  success: false,
-                  message: `Invalid image format for ${key}. Allowed types: ${allowedImageTypes.join(', ')}`
-                }, 400);
-              }
-              
-              // Validate file size
-              const maxSize = isVideo ? maxFileSize.video : maxFileSize.image;
-              
-              if (file.size > maxSize) {
-                const maxSizeMB = maxSize / (1024 * 1024);
-                return c.json({
-                  success: false,
-                  message: `File too large for ${key}. Maximum size: ${maxSizeMB}MB`
-                }, 400);
-              }
-              
-              try {
-                // Create a unique filename
-                const fileExtension = path.extname(file.originalFilename);
-                const fileName = `${uploadConfig.folder}/${uuidv4()}${fileExtension}`;
-                
-                // Set up S3 client for R2
-                const s3Client = new S3Client({
-                  region: 'auto',
-                  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-                  credentials: {
-                    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-                    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-                  }
+              // For video files larger than 100MB, use chunked upload
+              if (isVideo && file.size > 100 * 1024 * 1024) {
+                // Create a file upload record
+                const fileUpload = await FileUpload.create({
+                  userId: user.id,
+                  fileName: file.originalname,
+                  fileSize: file.size,
+                  fileType: file.mimetype,
+                  uploadPath: fileName,
+                  modelType: 'Other',
+                  status: 'chunking',
+                  progress: 0
                 });
                 
-                // For video files larger than 100MB, use chunked upload
-                if (isVideo && file.size > 100 * 1024 * 1024) {
-                  // Create a file upload record
-                  const fileUpload = await FileUpload.create({
-                    userId: user.id,
-                    fileName: file.originalFilename,
-                    fileSize: file.size,
-                    fileType: file.mimetype,
-                    uploadPath: fileName,
-                    modelType: 'Other',
-                    status: 'chunking',
-                    progress: 0
-                  });
+                // Initialize multipart upload
+                const createCommand = new CreateMultipartUploadCommand({
+                  Bucket: process.env.R2_BUCKET_NAME,
+                  Key: fileName,
+                  ContentType: file.mimetype
+                });
+                
+                const { UploadId } = await s3Client.send(createCommand);
+                
+                // Update file upload record with upload ID
+                await FileUpload.findByIdAndUpdate(fileUpload._id, { uploadId: UploadId });
+                
+                // Read file and upload in chunks
+                const fileBuffer = fs.readFileSync(file.path);
+                const chunkSize = 5 * 1024 * 1024; // 5MB chunks
+                const chunks = Math.ceil(file.size / chunkSize);
+                const parts = [];
+                
+                for (let i = 0; i < chunks; i++) {
+                  const start = i * chunkSize;
+                  const end = Math.min(start + chunkSize, file.size);
+                  const chunk = fileBuffer.slice(start, end);
                   
-                  // Initialize multipart upload
-                  const createCommand = new CreateMultipartUploadCommand({
-                    Bucket: process.env.R2_BUCKET_NAME,
-                    Key: fileName,
-                    ContentType: file.mimetype
-                  });
-                  
-                  const { UploadId } = await s3Client.send(createCommand);
-                  
-                  // Update file upload record with upload ID
-                  await FileUpload.findByIdAndUpdate(fileUpload._id, { uploadId: UploadId });
-                  
-                  // Read file and upload in chunks
-                  const fileBuffer = fs.readFileSync(file.filepath);
-                  const chunkSize = 5 * 1024 * 1024; // 5MB chunks
-                  const chunks = Math.ceil(file.size / chunkSize);
-                  const parts = [];
-                  
-                  for (let i = 0; i < chunks; i++) {
-                    const start = i * chunkSize;
-                    const end = Math.min(start + chunkSize, file.size);
-                    const chunk = fileBuffer.slice(start, end);
-                    
-                    const uploadPartCommand = new UploadPartCommand({
-                      Bucket: process.env.R2_BUCKET_NAME,
-                      Key: fileName,
-                      UploadId: UploadId,
-                      PartNumber: i + 1,
-                      Body: chunk
-                    });
-                    
-                    const { ETag } = await s3Client.send(uploadPartCommand);
-                    
-                    parts.push({
-                      ETag,
-                      PartNumber: i + 1
-                    });
-                    
-                    // Update progress
-                    const progress = Math.round(((i + 1) / chunks) * 100);
-                    await FileUpload.findByIdAndUpdate(fileUpload._id, { progress });
-                    
-                    // Emit progress via socket
-                    socketService.emitUploadProgress(user.id, fileUpload._id.toString(), progress);
-                  }
-                  
-                  // Complete multipart upload
-                  const completeCommand = new CompleteMultipartUploadCommand({
+                  const uploadPartCommand = new UploadPartCommand({
                     Bucket: process.env.R2_BUCKET_NAME,
                     Key: fileName,
                     UploadId: UploadId,
-                    MultipartUpload: {
-                      Parts: parts
-                    }
+                    PartNumber: i + 1,
+                    Body: chunk
                   });
                   
-                  await s3Client.send(completeCommand);
+                  const { ETag } = await s3Client.send(uploadPartCommand);
                   
-                  // Update file upload record
-                  const fileUrl = `${R2_PUBLIC_URL}/${fileName}`;
-                  await FileUpload.findByIdAndUpdate(fileUpload._id, {
-                    status: 'completed',
-                    progress: 100,
-                    url: fileUrl
+                  parts.push({
+                    ETag,
+                    PartNumber: i + 1
                   });
                   
-                  // Emit completion via socket
-                  socketService.emitUploadComplete(user.id, fileUpload._id.toString(), fileUrl);
+                  // Update progress
+                  const progress = Math.round(((i + 1) / chunks) * 100);
+                  await FileUpload.findByIdAndUpdate(fileUpload._id, { progress });
                   
-                  // Set the URL in uploads object with proper field name mapping
-                  if (key === 'video') {
-                    uploads['videoFile'] = fileUrl;
-                  } else {
-                    uploads[key] = fileUrl;
+                  // Emit progress via socket
+                  socketService.emitUploadProgress(user.id, fileUpload._id.toString(), progress);
+                }
+                
+                // Complete multipart upload
+                const completeCommand = new CompleteMultipartUploadCommand({
+                  Bucket: process.env.R2_BUCKET_NAME,
+                  Key: fileName,
+                  UploadId: UploadId,
+                  MultipartUpload: {
+                    Parts: parts
                   }
+                });
+                
+                await s3Client.send(completeCommand);
+                
+                // Update file upload record
+                const fileUrl = `${R2_PUBLIC_URL}/${fileName}`;
+                await FileUpload.findByIdAndUpdate(fileUpload._id, {
+                  status: 'completed',
+                  progress: 100,
+                  url: fileUrl
+                });
+                
+                // Emit completion via socket
+                socketService.emitUploadComplete(user.id, fileUpload._id.toString(), fileUrl);
+                
+                // Set the URL in uploads object with proper field name mapping
+                if (fieldName === 'video') {
+                  uploads['videoFile'] = fileUrl;
                 } else {
-                  // Regular upload for smaller files
-                  const fileBuffer = fs.readFileSync(file.filepath);
-                  
-                  // Create upload command
-                  const command = new PutObjectCommand({
-                    Bucket: process.env.R2_BUCKET_NAME,
-                    Key: fileName,
-                    Body: fileBuffer,
-                    ContentType: file.mimetype
+                  uploads[fieldName] = fileUrl;
+                }
+              } else {
+                // Create a file upload record for tracking
+                const fileUpload = await FileUpload.create({
+                  userId: user.id,
+                  fileName: file.originalname,
+                  fileSize: file.size,
+                  fileType: file.mimetype,
+                  uploadPath: fileName,
+                  modelType: 'Other',
+                  status: 'uploading',
+                  progress: 0
+                });
+                
+                // Update progress to 5% when starting upload to R2
+                await FileUpload.findByIdAndUpdate(fileUpload._id, { progress: 5 });
+                socketService.emitUploadProgress(user.id, fileUpload._id.toString(), 5);
+                console.log(`Starting upload to R2 for ${file.originalname} (${Math.round(file.size / 1024 / 1024 * 100) / 100}MB)`);
+                
+                // Regular upload for smaller files
+                const fileBuffer = fs.readFileSync(file.path);
+                const fileSize = file.size;
+                
+                // Create upload command
+                const command = new PutObjectCommand({
+                  Bucket: process.env.R2_BUCKET_NAME,
+                  Key: fileName,
+                  Body: fileBuffer,
+                  ContentType: file.mimetype
+                });
+                
+                // Set up progress tracking
+                let lastReportedProgress = 5;
+                let uploadStartTime = Date.now();
+                
+                // Use a wrapper to track progress
+                const uploadWithProgress = async () => {
+                  try {
+                    // Upload to R2
+                    await s3Client.send(command);
+                    
+                    // Calculate upload speed and update progress in increments
+                    const uploadTime = (Date.now() - uploadStartTime) / 1000; // seconds
+                    const uploadSpeed = Math.round((fileSize / uploadTime) / 1024); // KB/s
+                    
+                    // Update progress in increments of 20% (or choose your preferred increment)
+                    const progressIncrements = [25, 50, 75, 95];
+                    
+                    for (const progress of progressIncrements) {
+                      if (lastReportedProgress < progress) {
+                        await FileUpload.findByIdAndUpdate(fileUpload._id, { progress });
+                        socketService.emitUploadProgress(user.id, fileUpload._id.toString(), progress);
+                        console.log(`Upload progress for ${file.originalname}: ${progress}% (${Math.round(fileSize * progress / 100 / 1024 / 1024 * 100) / 100}MB / ${Math.round(fileSize / 1024 / 1024 * 100) / 100}MB), Speed: ${uploadSpeed}KB/s`);
+                        lastReportedProgress = progress;
+                        
+                        // Add a small delay to make the progress updates visible
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                      }
+                    }
+                    
+                    // Update progress to 100% when upload completes
+                    await FileUpload.findByIdAndUpdate(fileUpload._id, { 
+                      progress: 100,
+                      status: 'completed',
+                      url: `${R2_PUBLIC_URL}/${fileName}`
+                    });
+                    socketService.emitUploadProgress(user.id, fileUpload._id.toString(), 100);
+                    console.log(`Upload completed for ${file.originalname}`);
+                    
+                    return true;
+                  } catch (error) {
+                    console.error('Error during upload:', error);
+                    await FileUpload.findByIdAndUpdate(fileUpload._id, { 
+                      status: 'failed',
+                      error: error.message
+                    });
+                    socketService.emitUploadError(user.id, fileUpload._id.toString(), error.message);
+                    return false;
+                  }
+                };
+                
+                // Execute the upload with progress tracking
+                const uploadSuccess = await uploadWithProgress();
+                
+                if (!uploadSuccess) {
+                  return res.status(500).json({
+                    success: false,
+                    message: 'Failed to upload file to storage'
                   });
-                  
-                  // Upload to R2
-                  await s3Client.send(command);
-                  
-                  // Set the URL in uploads object with proper field name mapping
-                  if (key === 'video') {
-                    // Map 'video' field to 'videoFile' in uploads object
-                    uploads['videoFile'] = `${R2_PUBLIC_URL}/${fileName}`;
-                    console.log('Set videoFile URL:', uploads['videoFile']);
-                  } else {
-                    uploads[key] = `${R2_PUBLIC_URL}/${fileName}`;
-                    console.log(`Set ${key} URL:`, uploads[key]);
+                }
+                
+                // Get video duration if it's a video file
+                let duration = null;
+                if (isVideo) {
+                  try {
+                    duration = await getVideoDurationInSeconds(file.path);
+                  } catch (durationError) {
+                    console.error('Error getting video duration:', durationError);
                   }
                 }
                 
-                // Clean up temp file
-                fs.unlinkSync(file.filepath);
-                
-              } catch (uploadError) {
-                console.error(`Error uploading ${key}:`, uploadError);
-                return c.json({
-                  success: false,
-                  message: `${key} upload failed: ${uploadError.message}`
-                }, 500);
+                // Set the URL in uploads object with proper field name mapping
+                const fileUrl = `${R2_PUBLIC_URL}/${fileName}`;
+                if (fieldName === 'video') {
+                  // Map 'video' field to 'videoFile' in uploads object
+                  uploads['videoFile'] = {
+                    url: fileUrl,
+                    fileName: file.originalname,
+                    fileSize: file.size,
+                    mimeType: file.mimetype,
+                    ...(duration && { duration })
+                  };
+                  console.log('Set videoFile URL:', uploads['videoFile']);
+                } else {
+                  uploads[fieldName] = {
+                    url: fileUrl,
+                    fileName: file.originalname,
+                    fileSize: file.size,
+                    mimeType: file.mimetype,
+                    ...(duration && { duration })
+                  };
+                  console.log(`Set ${fieldName} URL:`, uploads[fieldName]);
+                }
               }
+              
+              // Clean up temp file
+              try {
+                fs.unlinkSync(file.path);
+              } catch (unlinkError) {
+                console.error('Error deleting temp file:', unlinkError);
+              }
+              
+            } catch (uploadError) {
+              console.error(`Error uploading ${fieldName}:`, uploadError);
+              return res.status(500).json({
+                success: false,
+                message: `${fieldName} upload failed: ${uploadError.message}`
+              });
             }
           }
-          
-          console.log('Final uploads object:', uploads);
-          
-          // Add uploads and body to request object instead of context
-          req.uploads = uploads;
-          req.body = { ...req.body, ...body };
-          
-          return next();
-        } catch (parseError) {
-          console.error('Error parsing form data:', parseError);
-          return res.status(400).json({ 
-            success: false, 
-            message: `Error parsing form data: ${parseError.message}`,
-            error: parseError.name,
-            code: parseError.code || 'UNKNOWN',
-            shouldUseChunkedUpload: parseError.message.includes('aborted') || parseError.message.includes('timeout')
-          });
         }
-      } else {
-        console.log('Not a multipart/form-data request, skipping file processing');
-        return next();
-      }
+        
+        console.log('Final uploads object:', uploads);
+        
+        // Add uploads to request object
+        req.uploads = uploads;
+        
+        // Continue to the next middleware
+        next();
+      });
     } catch (error) {
       console.error('Upload error:', error);
       return res.status(500).json({ 
@@ -473,29 +578,26 @@ export const handleUpload = (type) => {
 
 /**
  * Initialize a chunked upload
- * @param {Object} c - Hono context
+ * @param {Object} req - Express request object
  * @param {Object} uploadConfig - Upload configuration
  * @returns {Object} Initialization result
  */
 async function initializeChunkedUpload(req, uploadConfig, user) {
   try {
-    const form = formidable({
-    maxFileSize: 500 * 1024 * 1024, // 500 MB
-    allowEmptyFiles: false,
-    multiples: false,
-    keepExtensions: true,
-    uploadDir: tempDir
-  });
+    // Create a multer instance for metadata parsing
+    const metadataStorage = multer.memoryStorage();
+    const metadataUpload = multer({ storage: metadataStorage }).none();
     
-    // Parse the form
-    const [fields] = await new Promise((resolve, reject) => {
-      form.parse(req, (err, fields) => {
+    // Parse form fields using multer
+    await new Promise((resolve, reject) => {
+      metadataUpload(req, req.res, (err) => {
         if (err) return reject(err);
-        resolve([fields]);
+        resolve();
       });
     });
     
-    const { fileName, fileSize, fileType, field } = fields;
+    // Get fields from request body
+    const { fileName, fileSize, fileType, field } = req.body;
     
     if (!fileName || !fileSize || !fileType || !field) {
       return {
@@ -590,7 +692,7 @@ async function initializeChunkedUpload(req, uploadConfig, user) {
 
 /**
  * Handle a chunk upload
- * @param {Object} c - Hono context
+ * @param {Object} req - Express request object
  * @param {string} fileId - File ID
  * @param {number} chunkIndex - Chunk index
  * @param {number} totalChunks - Total number of chunks
@@ -615,33 +717,43 @@ async function handleChunkUpload(req, fileId, chunkIndex, totalChunks) {
       };
     }
     
-    // Parse the form with increased timeout
-    const form = formidable({
-      maxFileSize: 500 * 1024 * 1024, // 500 MB
-      allowEmptyFiles: false,
-      multiples: false,
-      keepExtensions: true,
-      uploadDir: tempDir
+    // Configure multer for chunk upload
+    const chunkStorage = multer.diskStorage({
+      destination: function (req, file, cb) {
+        cb(null, tempDir);
+      },
+      filename: function (req, file, cb) {
+        const filename = `chunk_${Date.now()}_${uuidv4()}`;
+        cb(null, filename);
+      }
     });
     
-    const [_, files] = await new Promise((resolve, reject) => {
-      form.parse(req, (err, fields, files) => {
+    const chunkUpload = multer({ 
+      storage: chunkStorage,
+      limits: {
+        fileSize: 500 * 1024 * 1024 // 500MB limit for chunks
+      }
+    }).single('chunk');
+    
+    // Process the chunk upload
+    await new Promise((resolve, reject) => {
+      chunkUpload(req, req.res, (err) => {
         if (err) {
           console.error('Chunk parsing error:', err);
           return reject(err);
         }
-        resolve([fields, files]);
+        resolve();
       });
     });
     
-    const chunkFile = files.chunk;
-    
-    if (!chunkFile) {
+    if (!req.file) {
       return {
         success: false,
         message: 'No chunk file found'
       };
     }
+    
+    const chunkFile = req.file;
     
     // Set up S3 client for R2
     const s3Client = new S3Client({
@@ -661,69 +773,94 @@ async function handleChunkUpload(req, fileId, chunkIndex, totalChunks) {
     
     while (attempts < maxAttempts && !uploadSuccess) {
       try {
-        attempts++;
-        const fileBuffer = fs.readFileSync(chunkFile.filepath);
+        // Read the chunk file
+        const chunkBuffer = fs.readFileSync(chunkFile.path);
         
+        // Upload the chunk to S3
         const uploadPartCommand = new UploadPartCommand({
           Bucket: process.env.R2_BUCKET_NAME,
           Key: fileUpload.uploadPath,
           UploadId: fileUpload.uploadId,
           PartNumber: chunkIndex + 1,
-          Body: fileBuffer
+          Body: chunkBuffer
         });
         
-        const result = await s3Client.send(uploadPartCommand);
-        ETag = result.ETag;
+        const response = await s3Client.send(uploadPartCommand);
+        ETag = response.ETag;
         uploadSuccess = true;
-      } catch (uploadError) {
-        console.error(`Chunk upload attempt ${attempts} failed:`, uploadError);
-        if (attempts >= maxAttempts) throw uploadError;
+      } catch (error) {
+        attempts++;
+        console.error(`Chunk upload attempt ${attempts} failed:`, error);
+        
+        if (attempts >= maxAttempts) {
+          // Mark upload as failed
+          await FileUpload.findByIdAndUpdate(fileId, { status: 'failed' });
+          
+          // Clean up temp file
+          try {
+            fs.unlinkSync(chunkFile.path);
+          } catch (unlinkError) {
+            console.error('Error deleting temp file:', unlinkError);
+          }
+          
+          return {
+            success: false,
+            message: `Failed to upload chunk after ${maxAttempts} attempts: ${error.message}`
+          };
+        }
+        
         // Wait before retrying
         await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
       }
     }
     
-    // Update progress
-    const progress = Math.round(((chunkIndex + 1) / totalChunks) * 100);
-    await FileUpload.findByIdAndUpdate(fileId, { progress });
-    
-    // Emit progress via socket
-    socketService.emitUploadProgress(fileUpload.userId, fileId, progress);
-    
     // Clean up temp file
-    fs.unlinkSync(chunkFile.filepath);
+    try {
+      fs.unlinkSync(chunkFile.path);
+    } catch (unlinkError) {
+      console.error('Error deleting temp file:', unlinkError);
+    }
+    
+    // Update progress with timestamp for speed calculation
+    const progress = Math.round(((chunkIndex + 1) / totalChunks) * 100);
+    const uploadedBytes = Math.round((progress / 100) * fileUpload.fileSize);
+    
+    await FileUpload.findByIdAndUpdate(fileId, { 
+      progress,
+      updatedAt: new Date() // Update timestamp for speed calculation
+    });
+    
+    // Emit progress via socket with more details
+    socketService.emitUploadStatus(
+      fileUpload.userId, 
+      fileId, 
+      'uploading', 
+      progress, 
+      {
+        uploadedBytes: uploadedBytes,
+        totalBytes: fileUpload.fileSize,
+        chunkIndex: chunkIndex + 1,
+        totalChunks: totalChunks
+      }
+    );
     
     return {
       success: true,
       etag: ETag,
-      partNumber: chunkIndex + 1,
-      progress
+      partNumber: chunkIndex + 1
     };
   } catch (error) {
-    console.error('Error uploading chunk:', error);
-    
-    // Update file upload record
-    await FileUpload.findByIdAndUpdate(fileId, {
-      status: 'failed',
-      error: error.message
-    });
-    
-    // Emit error via socket
-    const fileUpload = await FileUpload.findById(fileId);
-    if (fileUpload) {
-      socketService.emitUploadError(fileUpload.userId, fileId, error.message);
-    }
-    
+    console.error('Error handling chunk upload:', error);
     return {
       success: false,
-      message: `Failed to upload chunk: ${error.message}`
+      message: `Failed to process chunk: ${error.message}`
     };
   }
 }
 
 /**
  * Complete a chunked upload
- * @param {Object} c - Hono context
+ * @param {Object} req - Express request object
  * @param {string} fileId - File ID
  * @returns {Object} Completion result
  */
@@ -746,23 +883,20 @@ async function completeChunkedUpload(req, fileId) {
       };
     }
     
-    // Parse the form
-    const form = formidable({
-      maxFileSize: 500 * 1024 * 1024, // 500 MB
-      allowEmptyFiles: false,
-      multiples: false,
-      keepExtensions: true,
-      maxFieldsSize: 1 * 1024 * 1024 // 1MB for fields
-    });
+    // Configure multer for metadata parsing
+    const metadataStorage = multer.memoryStorage();
+    const metadataUpload = multer({ storage: metadataStorage }).none();
     
-    const [fields] = await new Promise((resolve, reject) => {
-      form.parse(req, (err, fields) => {
+    // Parse form fields using multer
+    await new Promise((resolve, reject) => {
+      metadataUpload(req, req.res, (err) => {
         if (err) return reject(err);
-        resolve([fields]);
+        resolve();
       });
     });
     
-    const { parts } = fields;
+    // Get parts information from request body
+    const { parts } = req.body;
     
     if (!parts) {
       return {
@@ -791,7 +925,7 @@ async function completeChunkedUpload(req, fileId) {
       }
     });
     
-    // Complete multipart upload
+    // Complete the multipart upload
     const completeCommand = new CompleteMultipartUploadCommand({
       Bucket: process.env.R2_BUCKET_NAME,
       Key: fileUpload.uploadPath,
@@ -821,17 +955,8 @@ async function completeChunkedUpload(req, fileId) {
   } catch (error) {
     console.error('Error completing chunked upload:', error);
     
-    // Update file upload record
-    await FileUpload.findByIdAndUpdate(fileId, {
-      status: 'failed',
-      error: error.message
-    });
-    
-    // Emit error via socket
-    const fileUpload = await FileUpload.findById(fileId);
-    if (fileUpload) {
-      socketService.emitUploadError(fileUpload.userId, fileId, error.message);
-    }
+    // Mark upload as failed
+    await FileUpload.findByIdAndUpdate(fileId, { status: 'failed' });
     
     return {
       success: false,
@@ -930,168 +1055,70 @@ export const getMultipleUploadProgress = async (req, res) => {
   }
 };
 
-// Optional upload middleware for profile pictures and other optional files
-export const optionalUpload = async (req, res, next) => {
-  const contentType = req.headers['content-type'] || '';
+/**
+ * Optional file upload middleware using multer
+ * @returns {Function} Middleware function
+ */
+export const optionalUpload = (req, res, next) => {
+  // Configure multer for optional uploads
+  const optionalMulterUpload = upload.fields([
+    { name: 'profilePicture', maxCount: 1 }
+  ]);
   
-  if (contentType.includes('multipart/form-data')) {
-    try {
-      // Use formidable for parsing
-      const form = formidable({
-        maxFileSize: 500 * 1024 * 1024, // 500 MB
-        allowEmptyFiles: false,
-        multiples: true,
-        keepExtensions: true,
-        uploadDir: tempDir
+  optionalMulterUpload(req, res, async (err) => {
+    if (err) {
+      console.error('Multer error in optional upload:', err);
+      return res.status(400).json({
+        success: false,
+        message: `Upload error: ${err.message}`
       });
-      
-      const [fields, files] = await new Promise((resolve, reject) => {
-        form.parse(req, (err, fields, files) => {
-          if (err) return reject(err);
-          resolve([fields, files]);
-        });
-      });
-      
-      const uploads = {};
-      const body = {};
-      
-      // Process fields
-      for (const [key, value] of Object.entries(fields)) {
-        // Try to parse as JSON if possible
-        if (typeof value === 'string' && 
-            ((value.startsWith('{') && value.endsWith('}')) || 
-            (value.startsWith('[') && value.endsWith(']')))) {
-          try {
-            body[key] = JSON.parse(value);
-          } catch (jsonError) {
-            body[key] = value;
-          }
-        } else {
-          body[key] = value;
-        }
-      }
-      
-      // Process files
-      for (const [key, fileInfo] of Object.entries(files)) {
-        const file = Array.isArray(fileInfo) ? fileInfo[0] : fileInfo;
+    }
+    
+    // Initialize uploads object
+    const uploads = {};
+    
+    // Process uploaded files
+    if (req.files) {
+      for (const [fieldName, files] of Object.entries(req.files)) {
+        const file = files[0]; // Get the first file for each field
         
         if (!file) continue;
         
-        if (key === 'profilePicture') {
-          // Handle file uploads
-          if (key === 'profilePicture') {
-            if (!allowedImageTypes.includes(value.type)) {
-              return res.status(400).json({ 
-                success: false, 
-                message: 'Invalid image type. Allowed types: ' + allowedImageTypes.join(', ') 
-              });
-            }
-            
-            if (value.size > maxFileSize.image) {
-              return res.status(400).json({ 
-                success: false, 
-                message: `File too large. Maximum size: ${(maxFileSize.image / (1024 * 1024))}MB` 
-              });
-            }
-            
-            try {
-              const fileExt = path.extname(value.name || '.jpg');
-              const fileName = `users/profile/${uuidv4()}${fileExt}`;
-              const fileBuffer = Buffer.from(await value.arrayBuffer());
-              
-              const command = new PutObjectCommand({
-                Bucket: process.env.R2_BUCKET_NAME,
-                Key: fileName,
-                Body: fileBuffer,
-                ContentType: value.type
-              });
-              
-              const s3Client = new S3Client({
-                region: 'auto',
-                endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-                credentials: {
-                  accessKeyId: process.env.R2_ACCESS_KEY_ID,
-                  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-                }
-              });
-              
-              await s3Client.send(command);
-              
-              uploads[key] = `${R2_PUBLIC_URL}/${fileName}`;
-            } catch (error) {
-              console.error('Error uploading profile picture:', error);
-              return res.status(500).json({ 
-                success: false, 
-                message: 'Profile picture upload failed: ' + error.message 
-              });
-            }
-          } else {
-            // Handle other file types
-            try {
-              const fileExt = path.extname(value.name || `.${value.type.split('/')[1]}`);
-              const fileName = `misc/${key}/${uuidv4()}${fileExt}`;
-              const fileBuffer = Buffer.from(await value.arrayBuffer());
-              
-              const command = new PutObjectCommand({
-                Bucket: process.env.R2_BUCKET_NAME,
-                Key: fileName,
-                Body: fileBuffer,
-                ContentType: value.type
-              });
-              
-              const s3Client = new S3Client({
-                region: 'auto',
-                endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-                credentials: {
-                  accessKeyId: process.env.R2_ACCESS_KEY_ID,
-                  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-                }
-              });
-              
-              await s3Client.send(command);
-              
-              uploads[key] = `${R2_PUBLIC_URL}/${fileName}`;
-            } catch (error) {
-              console.error(`Error uploading ${key}:`, error);
-              return res.status(500).json({ 
-                success: false, 
-                message: `${key} upload failed: ` + error.message 
-              });
-            }
-          }
-        } else {
-          // Process non-file form data
+        try {
+          // Upload file to cloud storage
+          const uploadResult = await uploadToCloudStorage(
+            file.path,
+            file.originalname,
+            file.mimetype,
+            'users',
+            req.user._id
+          );
+          
+          // Add to uploads object
+          uploads[fieldName] = {
+            url: uploadResult.url,
+            fileName: file.originalname,
+            fileSize: file.size,
+            mimeType: file.mimetype
+          };
+          
+          // Clean up temp file
           try {
-            // Try to parse as JSON if possible
-            if (typeof value === 'string' && 
-                ((value.startsWith('{') && value.endsWith('}')) || 
-                (value.startsWith('[') && value.endsWith(']')))) {
-              try {
-                body[key] = JSON.parse(value);
-              } catch (jsonError) {
-                body[key] = value;
-              }
-            } else {
-              body[key] = value;
-            }
-          } catch (e) {
-            body[key] = value;
+            fs.unlinkSync(file.path);
+          } catch (unlinkError) {
+            console.error('Error deleting temp file:', unlinkError);
           }
+        } catch (uploadError) {
+          console.error(`Error uploading ${fieldName}:`, uploadError);
+          // Continue without failing - this is optional upload
         }
       }
-      
-      // Add uploads and body to request
-      req.uploads = uploads;
-      req.body = { ...req.body, ...body };
-      
-      return next();
-    } catch (error) {
-      console.error('Optional upload error:', error);
-      // Continue without file upload if there's an error
-      return next();
     }
-  }
-  
-  // Otherwise just continue
-  return next();
+    
+    // Add uploads to request object
+    req.uploads = uploads;
+    
+    // Continue to the next middleware
+    next();
+  });
 };
