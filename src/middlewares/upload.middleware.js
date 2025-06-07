@@ -14,6 +14,8 @@ import { getVideoDurationInSeconds } from 'get-video-duration'
 import multer from 'multer'
 import FileUpload from '../models/fileUpload.model.js'
 import socketService from '../services/socket.service.js'
+import videoProcessorService from '../services/videoProcessor.service.js'
+import { OrientationType } from '../models/contentOrientation.model.js'
 
 // File type and size constraints
 const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp']
@@ -324,12 +326,45 @@ export const handleUpload = (type) => {
             if (!file) continue;
             
             // Determine if this is a video file
-            const isVideo = fieldName === 'videoFile' || fieldName === 'video' || fieldName === 'trailer';
-            
-            try {
-              // Create a unique filename
-              const fileExtension = path.extname(file.originalname);
-              const fileName = `${uploadConfig.folder}/${uuidv4()}${fileExtension}`;
+              const isVideo = fieldName === 'videoFile' || fieldName === 'video' || fieldName === 'trailer';
+              
+              try {
+                // Check video orientation before uploading if it's a video file
+                if (isVideo) {
+                  try {
+                    // Get content orientation from request body if available
+                    const requestedOrientation = req.body.orientation;
+                    
+                    // Detect video orientation
+                    console.log(`Detecting orientation for ${file.originalname} before upload`);
+                    const videoMetadata = await videoProcessorService.detectOrientation(file.path);
+                    console.log(`Detected video orientation: ${videoMetadata.orientation}, dimensions: ${videoMetadata.width}x${videoMetadata.height}`);
+                    
+                    
+                    // Store metadata in request for later use
+                    req.videoMetadata = req.videoMetadata || {};
+                    req.videoMetadata[fieldName] = videoMetadata;
+                    
+                    // Validate orientation if requested orientation is provided
+                    if (requestedOrientation) {
+                      try {
+                        videoProcessorService.validateOrientation(videoMetadata, requestedOrientation);
+                      } catch (orientationError) {
+                        return res.status(400).json({
+                          success: false,
+                          message: orientationError.message
+                        });
+                      }
+                    }
+                  } catch (orientationError) {
+                    console.error('Error detecting video orientation:', orientationError);
+                    // Continue with upload even if orientation detection fails
+                  }
+                }
+                
+                // Create a unique filename
+                const fileExtension = path.extname(file.originalname);
+                const fileName = `${uploadConfig.folder}/${uuidv4()}${fileExtension}`;
               
               // Set up S3 client for R2
               const s3Client = new S3Client({
