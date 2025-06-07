@@ -213,6 +213,19 @@ export const handleUpload = (type) => {
       const contentType = req.headers['content-type'] || '';
       console.log('Request path:', req.path);
       console.log('Content-Type:', contentType);
+      console.log('Starting file upload, content type:', req.headers['content-type']);
+      console.log('Content length:', req.headers['content-length'], 'bytes');
+      
+      // Add request timeout listener
+      req.on('timeout', () => {
+        console.error('Request timeout occurred during file upload');
+      });
+      
+      req.on('close', () => {
+        if (!req.complete) {
+          console.error('Client closed connection prematurely');
+        }
+      });
       
       // Get user from request (set by auth middleware)
       const user = req.user;

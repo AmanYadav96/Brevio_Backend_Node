@@ -1,3 +1,11 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
+// Debug environment variables
+console.log('Environment variables loaded:');
+console.log('FIREBASE_API_KEY:', process.env.FIREBASE_API_KEY);
+console.log('NODE_ENV:', process.env.NODE_ENV);
+
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
@@ -150,15 +158,15 @@ const options = {
   ca: fs.readFileSync('./cert/ca_bundle.crt') // If you have a CA bundle
 };
 // Create HTTP server
-const server = http.createServer(options,app);
-server.timeout = 30*60*1000;
+// Create server with extended timeout
+const server = http.createServer({
+  requestTimeout: 300000*20, // 5 minutes
+  headersTimeout: 300000*20, // 5 minutes + 5 seconds
+}, app);
 
-// Initialize Socket.io with the HTTP server
-socketService.initialize(server);
-
-// Start the server
+// Use this server instead of app.listen
 server.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
 
 
