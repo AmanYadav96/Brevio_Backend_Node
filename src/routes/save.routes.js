@@ -3,7 +3,7 @@ import {
   toggleSave, 
   checkSaved, 
   getSavedContent, 
-  updateSavedFolder 
+  updateSaveFolder 
 } from '../controllers/save.controller.js'
 import { protect } from '../middlewares/auth.middleware.js'
 
@@ -14,6 +14,6 @@ router.use(protect)
 router.post('/toggle', toggleSave)
 router.get('/check', checkSaved)
 router.get('/', getSavedContent)
-router.patch('/:id', updateSavedFolder)
+router.patch('/:id', updateSaveFolder)
 
 export default router
