@@ -40,6 +40,12 @@ import creatorContentRoutes from "./src/routes/creatorContent.routes.js";
 import channelSubscriptionRoutes from "./src/routes/channelSubscription.routes.js";
 import sliderRoutes from "./src/routes/slider.routes.js";
 import categoryRoutes from "./src/routes/category.routes.js";
+import likeRoutes from './src/routes/like.routes.js'
+import commentRoutes from './src/routes/comment.routes.js'
+import saveRoutes from './src/routes/save.routes.js'
+
+// Add these lines where you register other routes
+
 import videoViewRoutes from "./src/routes/videoView.routes.js"
 import { errorHandler } from "./src/middlewares/error.middleware.js";
 
@@ -113,6 +119,10 @@ app.use("/api/donations", donationRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/contracts", contractRoutes);
 app.use("/api/views", videoViewRoutes)
+
+app.route('/api/likes', likeRoutes)
+app.route('/api/comments', commentRoutes)
+app.route('/api/saves', saveRoutes)
 // Health check route
 app.get("/", (req, res) => res.json({ status: "Server is running" }));
 
