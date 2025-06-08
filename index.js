@@ -120,9 +120,9 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/contracts", contractRoutes);
 app.use("/api/views", videoViewRoutes)
 
-app.route('/api/likes', likeRoutes)
-app.route('/api/comments', commentRoutes)
-app.route('/api/saves', saveRoutes)
+app.use('/api/likes', likeRoutes)
+app.use('/api/comments', commentRoutes)
+app.use('/api/saves', saveRoutes)
 // Health check route
 app.get("/", (req, res) => res.json({ status: "Server is running" }));
 
