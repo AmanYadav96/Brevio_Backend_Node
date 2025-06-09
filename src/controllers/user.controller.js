@@ -77,6 +77,8 @@ export const updateUserProfile = async (req, res) => {
   try {
     // Log what we're getting from the context
     console.log("Controller received userId:", req.user._id);
+    console.log("Request body:", req.body);
+    console.log("Uploads:", req.uploads);
     
     const userId = req.user._id; // Get the authenticated user's ID
     
@@ -97,13 +99,15 @@ export const updateUserProfile = async (req, res) => {
     // Handle file uploads if present
     if (req.uploads) {
       if (req.uploads.profilePicture) {
-        updates.profilePicture = req.uploads.profilePicture;
+        updates.profilePicture = req.uploads.profilePicture.url;
       }
       
       if (req.uploads.coverPhoto) {
-        updates.coverPhoto = req.uploads.coverPhoto;
+        updates.coverPhoto = req.uploads.coverPhoto.url;
       }
     }
+    
+    console.log("Updates to be applied:", updates);
     
     // Update the user
     const updatedUser = await User.findByIdAndUpdate(
@@ -111,6 +115,8 @@ export const updateUserProfile = async (req, res) => {
       { $set: updates },
       { new: true, runValidators: true }
     );
+    
+    console.log("User updated successfully:", updatedUser);
     
     return res.json({
       success: true,
@@ -127,10 +133,10 @@ export const updateUserProfile = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error("Update user profile error:", error);
     if (error instanceof AppError) {
       return res.status(error.statusCode).json({ success: false, message: error.message });
     }
-    console.error("Update user profile error:", error);
     return res.status(500).json({ success: false, message: "Failed to update profile" });
   }
 }

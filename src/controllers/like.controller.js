@@ -67,7 +67,7 @@ export const toggleLike = async (req, res) => {
 // Get likes for content
 export const getLikes = async (req, res) => {
   try {
-    const { contentType, contentId } = req.query
+    const { contentType, contentId, userId } = req.query
     
     // Validate content type
     if (!['content', 'creatorContent', 'comment'].includes(contentType)) {
@@ -80,12 +80,19 @@ export const getLikes = async (req, res) => {
       contentId
     })
     
-    // Check if the current user has liked this content
+    // Check if the specified user has liked this content
     let userLiked = false
-    if (req.user) {
-      const userId = req.user._id
+    if (userId) {
       const userLike = await Like.findOne({
         user: userId,
+        contentType,
+        contentId
+      })
+      userLiked = !!userLike
+    } else if (req.user) {
+      // Fall back to authenticated user if available
+      const userLike = await Like.findOne({
+        user: req.user._id,
         contentType,
         contentId
       })

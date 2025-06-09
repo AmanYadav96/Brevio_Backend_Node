@@ -1,11 +1,12 @@
 import express from 'express'
 import { toggleLike, getLikes, getUserLikes } from '../controllers/like.controller.js'
-import { protect } from '../middlewares/auth.middleware.js'
+import { optionalProtect } from '../middlewares/auth.middleware.js'
 
 const router = express.Router()
 
 // Public routes
-router.get('/', getLikes)
+// Change this line
+router.get('/', optionalProtect, getLikes)
 
 // Protected routes
 router.use(protect)

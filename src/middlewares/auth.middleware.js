@@ -76,3 +76,23 @@ export const restrictTo = (...roles) => {
     next();
   };
 };
+
+export const optionalProtect = async (req, res, next) => {
+  try {
+    // Get token from header
+    const token = req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+      return next(); // Continue without authentication
+    }
+    
+    // Verify token and set req.user if valid
+    // (Use your existing token verification logic)
+    // ...
+    
+    next();
+  } catch (error) {
+    // Just continue without authentication on error
+    next();
+  }
+};
