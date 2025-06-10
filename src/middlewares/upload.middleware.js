@@ -22,7 +22,8 @@ const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp']
 const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/x-matroska', 'video/quicktime']
 const maxFileSize = {
   image: 500 * 1024 * 1024, // 500MB
-  video: 5 * 1024 * 1024 * 1024 // 5GB
+  video: 5 * 1024 * 1024 * 1024, // 5GB
+  audio: 500 * 1024 * 1024 // 500MB
 }
 
 // Constants for cloud storage
@@ -135,6 +136,77 @@ async function uploadToCloudStorage(filePath, originalName, mimeType, folder, us
     url: `${R2_PUBLIC_URL}/${fileName}`,
     path: fileName
   };
+}
+
+// Process video with compression
+async function processVideoWithCompression(file, fieldName, uploads, user) {
+  try {
+    console.log(`Processing video with compression: ${file.originalname}`)
+    
+    // Get temp directory for processing
+    const tempDir = getTempDirectory()
+    
+    // Compress the video
+    const compressionResult = await videoProcessorService.compressVideo(file.path, tempDir)
+    
+    console.log(`Video compressed: ${file.originalname}, Compression ratio: ${compressionResult.compressionRatio}x`)
+    
+    // Upload the compressed file to cloud storage
+    const fileUrl = await uploadToCloudStorage(
+      compressionResult.path,
+      file.originalname,
+      file.mimetype,
+      'videos',
+      user.id
+    )
+    
+    // Get video duration
+    let duration = null
+    try {
+      duration = await getVideoDurationInSeconds(compressionResult.path)
+    } catch (durationError) {
+      console.error('Error getting video duration:', durationError)
+    }
+    
+    // Set the URL in uploads object with proper field name mapping
+    if (fieldName === 'video') {
+      // Map 'video' field to 'videoFile' in uploads object
+      uploads['videoFile'] = {
+        url: fileUrl.url,
+        fileName: file.originalname,
+        fileSize: compressionResult.compressedSize,
+        originalSize: file.size,
+        compressionRatio: compressionResult.compressionRatio,
+        mimeType: file.mimetype,
+        ...(duration && { duration })
+      }
+      console.log('Set compressed videoFile URL:', uploads['videoFile'])
+    } else {
+      uploads[fieldName] = {
+        url: fileUrl.url,
+        fileName: file.originalname,
+        fileSize: compressionResult.compressedSize,
+        originalSize: file.size,
+        compressionRatio: compressionResult.compressionRatio,
+        mimeType: file.mimetype,
+        ...(duration && { duration })
+      }
+      console.log(`Set compressed ${fieldName} URL:`, uploads[fieldName])
+    }
+    
+    // Clean up temp files
+    try {
+      fs.unlinkSync(file.path) // Original file
+      fs.unlinkSync(compressionResult.path) // Compressed file
+    } catch (unlinkError) {
+      console.error('Error deleting temp files:', unlinkError)
+    }
+    
+    return true
+  } catch (error) {
+    console.error('Error processing video with compression:', error)
+    return false
+  }
 }
 
 // Create multer upload instance with size limits
@@ -326,47 +398,24 @@ export const handleUpload = (type) => {
             if (!file) continue;
             
             // Determine if this is a video file
-              const isVideo = fieldName === 'videoFile' || fieldName === 'video' || fieldName === 'trailer';
-              
+            const isVideo = fieldName === 'videoFile' || fieldName === 'video' || fieldName === 'trailer';
+            
+            if (isVideo) {
+              // Process video with compression
+              const success = await processVideoWithCompression(file, fieldName, uploads, req.user);
+              if (!success) {
+                return res.status(500).json({
+                  success: false,
+                  message: 'Failed to process video file'
+                });
+              }
+            } else {
               try {
-                // Check video orientation before uploading if it's a video file
-                if (isVideo) {
-                  try {
-                    // Get content orientation from request body if available
-                    const requestedOrientation = req.body.orientation;
-                    
-                    // Detect video orientation
-                    console.log(`Detecting orientation for ${file.originalname} before upload`);
-                    const videoMetadata = await videoProcessorService.detectOrientation(file.path);
-                    console.log(`Detected video orientation: ${videoMetadata.orientation}, dimensions: ${videoMetadata.width}x${videoMetadata.height}`);
-                    
-                    
-                    // Store metadata in request for later use
-                    req.videoMetadata = req.videoMetadata || {};
-                    req.videoMetadata[fieldName] = videoMetadata;
-                    
-                    // Validate orientation if requested orientation is provided
-                    if (requestedOrientation) {
-                      try {
-                        videoProcessorService.validateOrientation(videoMetadata, requestedOrientation);
-                      } catch (orientationError) {
-                        return res.status(400).json({
-                          success: false,
-                          message: orientationError.message
-                        });
-                      }
-                    }
-                  } catch (orientationError) {
-                    console.error('Error detecting video orientation:', orientationError);
-                    // Continue with upload even if orientation detection fails
-                  }
-                }
-                
                 // Create a unique filename
                 const fileExtension = path.extname(file.originalname);
                 const fileName = `${uploadConfig.folder}/${uuidv4()}${fileExtension}`;
               
-              // Set up S3 client for R2
+                // Set up S3 client for R2
               const s3Client = new S3Client({
                 region: 'auto',
                 endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -613,7 +662,7 @@ export const handleUpload = (type) => {
         
         // Continue to the next middleware
         next();
-      });
+    }});
     } catch (error) {
       console.error('Upload error:', error);
       return res.status(500).json({ 

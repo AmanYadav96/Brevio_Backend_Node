@@ -2,6 +2,9 @@ import ffmpeg from 'fluent-ffmpeg'
 import { OrientationType } from '../models/contentOrientation.model.js'
 import ffmpegPath from '@ffmpeg-installer/ffmpeg'
 import ffprobePath from '@ffprobe-installer/ffprobe'
+import path from 'path'
+import fs from 'fs'
+import { v4 as uuidv4 } from 'uuid'
 
 // Set FFmpeg paths
 ffmpeg.setFfmpegPath(ffmpegPath.path)
@@ -121,6 +124,120 @@ export class VideoProcessorService {
       throw new Error(`Video orientation (${videoMetadata.orientation}) does not match selected orientation (${selectedOrientation}). Please upload a ${selectedOrientation} video.`)
     }
     return true
+  }
+  
+  // Compress video while maintaining quality
+  async compressVideo(inputPath, outputDir) {
+    return new Promise((resolve, reject) => {
+      try {
+        // Create a unique filename for the compressed video
+        const originalExt = path.extname(inputPath)
+        const filename = `compressed_${uuidv4()}${originalExt}`
+        const outputPath = path.join(outputDir, filename)
+        
+        // Ensure output directory exists
+        if (!fs.existsSync(outputDir)) {
+          fs.mkdirSync(outputDir, { recursive: true })
+        }
+        
+        console.log(`Compressing video: ${inputPath} -> ${outputPath}`)
+        
+        // Get video metadata first to make intelligent compression decisions
+        ffmpeg.ffprobe(inputPath, (err, metadata) => {
+          if (err) {
+            console.error('FFprobe error during compression:', err)
+            return reject(err)
+          }
+          
+          try {
+            const videoStream = metadata.streams.find(stream => stream.codec_type === 'video')
+            if (!videoStream) {
+              return reject(new Error('No video stream found'))
+            }
+            
+            // Get original bitrate and resolution
+            const originalBitrate = parseInt(metadata.format.bit_rate) || 8000000 // default to 8Mbps if not available
+            const width = videoStream.width
+            const height = videoStream.height
+            
+            // Calculate target bitrate (60% of original, but not less than 1Mbps)
+            const targetBitrate = Math.max(Math.round(originalBitrate * 0.4), 1000000)
+            
+            // Start FFmpeg command
+            const command = ffmpeg(inputPath)
+              .outputOptions([
+                '-c:v libx264',              // Use H.264 codec
+                '-preset medium',            // Balance between compression speed and quality
+                `-b:v ${targetBitrate}`,     // Target bitrate (reduced to 40% of original)
+                '-maxrate 8M',              // Maximum bitrate
+                '-bufsize 16M',             // Buffer size
+                '-movflags +faststart',     // Optimize for web streaming
+                '-profile:v high',          // High profile for better quality
+                '-level 4.1',               // Compatibility level
+                '-crf 28'                   // Increased CRF for better compression (higher value = smaller file)
+              ])
+              .outputOptions('-c:a aac')     // Use AAC for audio
+              .outputOptions('-b:a 128k')    // Audio bitrate
+              .output(outputPath)
+            
+            // Add progress handler
+            command.on('progress', (progress) => {
+              console.log(`Compression progress: ${progress.percent ? progress.percent.toFixed(1) : 0}% done`);
+            })
+            
+            // Execute the command
+            command.on('end', () => {
+              // Get file sizes for comparison
+              const originalSize = fs.statSync(inputPath).size
+              const compressedSize = fs.statSync(outputPath).size
+              const compressionRatio = (originalSize / compressedSize).toFixed(2)
+              
+              console.log(`Compression complete! Original: ${(originalSize/1024/1024).toFixed(2)}MB, ` +
+                          `Compressed: ${(compressedSize/1024/1024).toFixed(2)}MB, ` +
+                          `Ratio: ${compressionRatio}x`)
+              
+              // If compression made the file larger, use the original instead
+              if (compressedSize > originalSize) {
+                console.log('Compression increased file size. Using original file instead.')
+                // Copy original to the output path or just use the original path
+                fs.copyFileSync(inputPath, outputPath)
+                
+                resolve({
+                  path: outputPath,
+                  originalSize,
+                  compressedSize: originalSize,
+                  compressionRatio: '1.00',
+                  filename
+                })
+              } else {
+                resolve({
+                  path: outputPath,
+                  originalSize,
+                  compressedSize,
+                  compressionRatio,
+                  filename
+                })
+              }
+            })
+            
+            command.on('error', (err) => {
+              console.error('FFmpeg compression error:', err)
+              reject(err)
+            })
+            
+            // Run the command
+            command.run()
+            
+          } catch (error) {
+            console.error('Error during compression setup:', error)
+            reject(error)
+          }
+        })
+      } catch (error) {
+        console.error('FFmpeg not available for compression:', error)
+        reject(error)
+      }
+    })
   }
 }
 
