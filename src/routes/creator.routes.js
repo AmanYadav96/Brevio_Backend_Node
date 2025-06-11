@@ -1,10 +1,17 @@
 import express from "express"
 import { protect } from "../middlewares/auth.middleware.js"
-import { getCreatorDashboard, getCreatorStats } from "../controllers/creator.controller.js"
+import { 
+  getCreatorDashboard, 
+  getCreatorStats,
+  getCreatorProfileById 
+} from "../controllers/creator.controller.js"
 
 const router = express.Router()
 
-// All routes require authentication
+// Public route - no authentication required
+router.get("/profile/:creatorId", getCreatorProfileById)
+
+// All routes below require authentication
 router.use(protect)
 
 // Get creator dashboard data

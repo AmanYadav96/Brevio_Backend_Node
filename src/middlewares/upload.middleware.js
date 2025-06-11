@@ -140,6 +140,8 @@ async function uploadToCloudStorage(filePath, originalName, mimeType, folder, us
 
 // Process video with compression
 async function processVideoWithCompression(file, fieldName, uploads, user) {
+  let compressedFilePath = null;
+  
   try {
     console.log(`Processing video with compression: ${file.originalname}`)
     
@@ -148,6 +150,7 @@ async function processVideoWithCompression(file, fieldName, uploads, user) {
     
     // Compress the video
     const compressionResult = await videoProcessorService.compressVideo(file.path, tempDir)
+    compressedFilePath = compressionResult.path;
     
     console.log(`Video compressed: ${file.originalname}, Compression ratio: ${compressionResult.compressionRatio}x`)
     
@@ -194,18 +197,25 @@ async function processVideoWithCompression(file, fieldName, uploads, user) {
       console.log(`Set compressed ${fieldName} URL:`, uploads[fieldName])
     }
     
-    // Clean up temp files
-    try {
-      fs.unlinkSync(file.path) // Original file
-      fs.unlinkSync(compressionResult.path) // Compressed file
-    } catch (unlinkError) {
-      console.error('Error deleting temp files:', unlinkError)
-    }
-    
     return true
   } catch (error) {
     console.error('Error processing video with compression:', error)
     return false
+  } finally {
+    // Clean up temp files regardless of success or failure
+    try {
+      if (file.path && fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path) // Original file
+        console.log(`Cleaned up original file: ${file.path}`)
+      }
+      
+      if (compressedFilePath && fs.existsSync(compressedFilePath)) {
+        fs.unlinkSync(compressedFilePath) // Compressed file
+        console.log(`Cleaned up compressed file: ${compressedFilePath}`)
+      }
+    } catch (unlinkError) {
+      console.error('Error deleting temp files:', unlinkError)
+    }
   }
 }
 

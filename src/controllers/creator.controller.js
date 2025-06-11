@@ -5,6 +5,8 @@ import User, { UserRole } from '../models/user.model.js';
 import Like from '../models/like.model.js';
 import { AppError } from '../utils/app-error.js';
 import mongoose from 'mongoose';
+import Channel from '../models/channel.model.js';
+import ChannelSubscription from '../models/channelSubscription.model.js';
 
 /**
  * Get creator dashboard statistics and data
@@ -198,6 +200,121 @@ export const getCreatorStats = async (req, res) => {
     return res.status(error.statusCode || 500).json({ 
       success: false, 
       message: error.message || 'Failed to fetch creator statistics' 
+    });
+  }
+};
+
+/**
+ * Get creator profile by user ID
+ * @param {Object} req - Request
+ * @param {Object} res - Response
+ * @returns {Object} Creator profile with content and stats
+ */
+export const getCreatorProfileById = async (req, res) => {
+  try {
+    const { creatorId } = req.params;
+    
+    // Validate MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(creatorId)) {
+      throw new AppError('Invalid creator ID', 400);
+    }
+    
+    // Find creator by ID
+    const creator = await User.findOne({ 
+      _id: creatorId, 
+      role: UserRole.CREATOR 
+    }).select('_id name username bio profilePicture createdAt');
+    
+    if (!creator) {
+      throw new AppError('Creator not found', 404);
+    }
+    
+    // Get creator's content with pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 12; // Instagram-like grid
+    const skip = (page - 1) * limit;
+    
+    // Find creator's channel
+    const channel = await Channel.findOne({
+      'owner.email': creator.email
+    }).select('_id name thumbnail type');
+    
+    // Get published content only
+    const [content, totalContent, subscribers, totalLikes, totalViews] = await Promise.all([
+      CreatorContent.find({ 
+        creator: creatorId,
+        status: 'published'
+      })
+        .select('_id title contentType mediaAssets.thumbnail views likes createdAt')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      
+      CreatorContent.countDocuments({ 
+        creator: creatorId,
+        status: 'published'
+      }),
+      
+      // Count subscribers/followers if channel exists
+      channel ? ChannelSubscription.countDocuments({
+        channel: channel._id,
+        isActive: true
+      }) : 0,
+      
+      // Count total likes across all content
+      Like.countDocuments({
+        contentType: 'creatorContent',
+        contentId: { $in: await CreatorContent.find({ creator: creatorId }).distinct('_id') }
+      }),
+      
+      // Calculate total views
+      CreatorContent.aggregate([
+        { $match: { creator: mongoose.Types.ObjectId(creatorId) } },
+        { $group: { _id: null, totalViews: { $sum: "$views" } } }
+      ])
+    ]);
+    
+    // Format content for Instagram-like grid
+    const formattedContent = content.map(item => ({
+      id: item._id,
+      title: item.title,
+      contentType: item.contentType,
+      thumbnail: item.mediaAssets?.thumbnail || '',
+      views: item.views || 0,
+      likes: item.likes || 0,
+      createdAt: item.createdAt
+    }));
+    
+    return res.json({
+      success: true,
+      profile: {
+        id: creator._id,
+        name: creator.name,
+        username: creator.username,
+        bio: creator.bio,
+        profilePicture: creator.profilePicture,
+        joinedDate: creator.createdAt,
+        channel: channel || null,
+        stats: {
+          posts: totalContent,
+          followers: subscribers,
+          likes: totalLikes,
+          views: totalViews.length > 0 ? totalViews[0].totalViews : 0
+        }
+      },
+      content: formattedContent,
+      pagination: {
+        total: totalContent,
+        pages: Math.ceil(totalContent / limit),
+        page,
+        limit
+      }
+    });
+  } catch (error) {
+    console.error('Get creator profile error:', error);
+    return res.status(error.statusCode || 500).json({ 
+      success: false, 
+      message: error.message || 'Failed to fetch creator profile' 
     });
   }
 };

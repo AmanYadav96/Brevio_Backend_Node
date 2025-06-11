@@ -6,10 +6,22 @@ import path from 'path'
 import fs from 'fs'
 import { v4 as uuidv4 } from 'uuid'
 
-// Set FFmpeg paths
-ffmpeg.setFfmpegPath(ffmpegPath.path)
-ffmpeg.setFfprobePath(ffprobePath.path)
+// Set FFmpeg paths - prioritize environment variables
+if (process.env.FFMPEG_PATH && fs.existsSync(process.env.FFMPEG_PATH)) {
+  console.log(`Using FFMPEG_PATH from environment: ${process.env.FFMPEG_PATH}`);
+  ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
+} else {
+  console.log(`Using FFMPEG_PATH from package: ${ffmpegPath.path}`);
+  ffmpeg.setFfmpegPath(ffmpegPath.path);
+}
 
+if (process.env.FFPROBE_PATH && fs.existsSync(process.env.FFPROBE_PATH)) {
+  console.log(`Using FFPROBE_PATH from environment: ${process.env.FFPROBE_PATH}`);
+  ffmpeg.setFfprobePath(process.env.FFPROBE_PATH);
+} else {
+  console.log(`Using FFPROBE_PATH from package: ${ffprobePath.path}`);
+  ffmpeg.setFfprobePath(ffprobePath.path);
+}
 export class VideoProcessorService {
   // Detect video orientation based on dimensions
   async detectOrientation(videoPath) {
@@ -160,8 +172,8 @@ export class VideoProcessorService {
             const width = videoStream.width
             const height = videoStream.height
             
-            // Calculate target bitrate (60% of original, but not less than 1Mbps)
-            const targetBitrate = Math.max(Math.round(originalBitrate * 0.4), 1000000)
+            // Calculate target bitrate (40% of original, but not less than 800Kbps)
+            const targetBitrate = Math.max(Math.round(originalBitrate * 0.4), 800000)
             
             // Start FFmpeg command
             const command = ffmpeg(inputPath)
@@ -169,8 +181,8 @@ export class VideoProcessorService {
                 '-c:v libx264',              // Use H.264 codec
                 '-preset medium',            // Balance between compression speed and quality
                 `-b:v ${targetBitrate}`,     // Target bitrate (reduced to 40% of original)
-                '-maxrate 8M',              // Maximum bitrate
-                '-bufsize 16M',             // Buffer size
+                '-maxrate 5M',              // Maximum bitrate (reduced from 8M)
+                '-bufsize 10M',             // Buffer size (reduced from 16M)
                 '-movflags +faststart',     // Optimize for web streaming
                 '-profile:v high',          // High profile for better quality
                 '-level 4.1',               // Compatibility level
@@ -199,7 +211,7 @@ export class VideoProcessorService {
               // If compression made the file larger, use the original instead
               if (compressedSize > originalSize) {
                 console.log('Compression increased file size. Using original file instead.')
-                // Copy original to the output path or just use the original path
+                // Copy original to the output path
                 fs.copyFileSync(inputPath, outputPath)
                 
                 resolve({
