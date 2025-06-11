@@ -269,7 +269,7 @@ export const getCreatorProfileById = async (req, res) => {
       
       // Calculate total views
       CreatorContent.aggregate([
-        { $match: { creator: mongoose.Types.ObjectId(creatorId) } },
+        { $match: { creator: new mongoose.Types.ObjectId(creatorId) } },
         { $group: { _id: null, totalViews: { $sum: "$views" } } }
       ])
     ]);
