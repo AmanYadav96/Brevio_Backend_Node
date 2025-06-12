@@ -43,6 +43,7 @@ import categoryRoutes from "./src/routes/category.routes.js";
 import likeRoutes from './src/routes/like.routes.js'
 import commentRoutes from './src/routes/comment.routes.js'
 import saveRoutes from './src/routes/save.routes.js'
+import passwordRoutes from './src/routes/password.routes.js'
 
 // Add these lines where you register other routes
 
@@ -119,6 +120,7 @@ app.use("/api/donations", donationRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/contracts", contractRoutes);
 app.use("/api/views", videoViewRoutes)
+app.use("/api/passwords",passwordRoutes)
 
 app.use('/api/likes', likeRoutes)
 app.use('/api/comments', commentRoutes)

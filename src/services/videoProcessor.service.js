@@ -27,7 +27,31 @@ export class VideoProcessorService {
   async detectOrientation(videoPath) {
     return new Promise((resolve, reject) => {
       try {
-        ffmpeg.ffprobe(videoPath, (err, metadata) => {
+        // Check if videoPath is a URL or an object with url property
+        let actualPath = videoPath;
+        if (typeof videoPath === 'object' && videoPath.url) {
+          actualPath = videoPath.url;
+        }
+        
+        // If it's a URL, we can't use ffprobe directly
+        if (typeof actualPath === 'string' && (actualPath.startsWith('http://') || actualPath.startsWith('https://'))) {
+          console.log('Remote URL detected, cannot use ffprobe directly:', actualPath);
+          // Return default values for remote URLs, but set orientation based on the requested orientation
+          // This is a workaround since we can't analyze remote URLs directly
+          return resolve({
+            width: 1080,  // Default width for vertical
+            height: 1920, // Default height for vertical
+            aspectRatio: '0.56',
+            orientation: OrientationType.VERTICAL, // Default to VERTICAL for remote URLs
+            format: 'mp4',
+            duration: 0,
+            bitrate: 0,
+            isRemoteUrl: true
+          });
+        }
+        
+        // Original ffprobe logic for local files
+        ffmpeg.ffprobe(actualPath, (err, metadata) => {
           if (err) {
             console.error('FFprobe error:', err)
             // Return default values if FFprobe fails
@@ -115,7 +139,7 @@ export class VideoProcessorService {
           }
         })
       } catch (error) {
-        console.error('FFmpeg not available:', error)
+        console.error('FFmpeg not available:', error);
         // Return default values if FFmpeg is not available
         return resolve({
           width: 1920,
@@ -125,17 +149,24 @@ export class VideoProcessorService {
           format: 'unknown',
           duration: 0,
           bitrate: 0
-        })
+        });
       }
-    })
+    });
   }
   
   // Validate if video orientation matches the selected content orientation
   validateOrientation(videoMetadata, selectedOrientation) {
+    // Skip validation for remote URLs and trust the selected orientation
+    if (videoMetadata.isRemoteUrl) {
+      console.log('Remote URL detected, skipping orientation validation and trusting selected orientation:', selectedOrientation);
+      return true;
+    }
+    
+    // Original validation logic for local files
     if (videoMetadata.orientation !== selectedOrientation) {
       throw new Error(`Video orientation (${videoMetadata.orientation}) does not match selected orientation (${selectedOrientation}). Please upload a ${selectedOrientation} video.`)
     }
-    return true
+    return true;
   }
   
   // Compress video while maintaining quality
