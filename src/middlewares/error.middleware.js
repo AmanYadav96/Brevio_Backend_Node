@@ -3,11 +3,14 @@ import { AppError } from "../utils/app-error.js";
 export const errorHandler = (err, req, res, next) => {
   console.error('Error:', err);
   
+  // Get the translate function from the request or use a default function
+  const translate = req.translate || ((msg) => msg);
+  
   // Check if it's an AppError
   if (err instanceof AppError) {
     return res.status(err.statusCode).json({
       success: false,
-      message: err.message,
+      message: translate(err.message),
       errors: err.errors
     });
   }
@@ -17,7 +20,7 @@ export const errorHandler = (err, req, res, next) => {
     const errors = Object.values(err.errors).map(val => val.message);
     return res.status(400).json({
       success: false,
-      message: 'Validation Error',
+      message: translate('Validation Error'),
       errors
     });
   }
@@ -27,7 +30,7 @@ export const errorHandler = (err, req, res, next) => {
     const field = Object.keys(err.keyValue)[0];
     return res.status(400).json({
       success: false,
-      message: `Duplicate value for ${field}`,
+      message: translate(`Duplicate value for ${field}`),
       field
     });
   }
@@ -36,14 +39,14 @@ export const errorHandler = (err, req, res, next) => {
   if (err.name === 'JsonWebTokenError') {
     return res.status(401).json({
       success: false,
-      message: 'Invalid token. Please log in again.'
+      message: translate('Invalid token. Please log in again.')
     });
   }
   
   if (err.name === 'TokenExpiredError') {
     return res.status(401).json({
       success: false,
-      message: 'Your token has expired. Please log in again.'
+      message: translate('Your token has expired. Please log in again.')
     });
   }
   
@@ -51,7 +54,7 @@ export const errorHandler = (err, req, res, next) => {
   if (err instanceof TypeError && err.message.includes('Cannot read properties of undefined')) {
     return res.status(400).json({
       success: false,
-      message: 'Invalid request data structure',
+      message: translate('Invalid request data structure'),
       error: err.message
     });
   }
@@ -60,7 +63,7 @@ export const errorHandler = (err, req, res, next) => {
   if (err instanceof TypeError && err.message.includes('is not a function')) {
     return res.status(500).json({
       success: false,
-      message: 'Server implementation error',
+      message: translate('Server implementation error'),
       error: err.message
     });
   }
@@ -68,6 +71,6 @@ export const errorHandler = (err, req, res, next) => {
   // Handle other types of errors
   return res.status(500).json({
     success: false,
-    message: err.message || 'Internal server error'
+    message: translate(err.message || 'Internal server error')
   });
 };

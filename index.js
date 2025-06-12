@@ -19,6 +19,7 @@ import { connectDB } from "./src/config/database.js";
 import socketService from './src/services/socket.service.js';
 import { swaggerSpec } from './src/config/swagger.js';
 import swaggerUi from 'swagger-ui-express';
+import { languageMiddleware } from './src/middlewares/language.middleware.js';
 
 // Import routes
 import authRoutes from "./src/routes/auth.routes.js";
@@ -98,6 +99,8 @@ app.use(helmet());
 app.use(express.json({limit:'500mb'}));
 app.use(express.urlencoded({ extended: true , limit: '500mb' }));
 
+// Aplicar el middleware de idioma a todas las rutas
+app.use(languageMiddleware);
 
 // Routes
 app.use("/api/auth", authRoutes);
