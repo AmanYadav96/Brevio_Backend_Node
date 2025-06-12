@@ -24,7 +24,17 @@ const errorMessages = {
     'Successfully upgraded to creator account': 'Successfully upgraded to creator account',
     'Failed to become a creator': 'Failed to become a creator',
     'Location verification failed': 'Location verification failed',
-    'Only users from Spain can become creators': 'Only users from Spain can become creators'
+    'Only users from Spain can become creators': 'Only users from Spain can become creators',
+    
+    // Genre-related messages
+    'Genre not found': 'Genre not found',
+    'Invalid genre ID': 'Invalid genre ID',
+    'Failed to fetch genres': 'Failed to fetch genres',
+    'Failed to fetch genre': 'Failed to fetch genre',
+    'Failed to create genre': 'Failed to create genre',
+    'Failed to update genre': 'Failed to update genre',
+    'Failed to delete genre': 'Failed to delete genre',
+    'Genre deleted successfully': 'Genre deleted successfully'
   },
   es: {
     // Authentication errors
@@ -51,7 +61,17 @@ const errorMessages = {
     'Successfully upgraded to creator account': 'Actualizado con éxito a cuenta de creador',
     'Failed to become a creator': 'No se pudo convertir en creador',
     'Location verification failed': 'La verificación de ubicación falló',
-    'Only users from Spain can become creators': 'Solo los usuarios de España pueden convertirse en creadores'
+    'Only users from Spain can become creators': 'Solo los usuarios de España pueden convertirse en creadores',
+    
+    // Genre-related messages
+    'Genre not found': 'Género no encontrado',
+    'Invalid genre ID': 'ID de género inválido',
+    'Failed to fetch genres': 'Error al obtener géneros',
+    'Failed to fetch genre': 'Error al obtener género',
+    'Failed to create genre': 'Error al crear género',
+    'Failed to update genre': 'Error al actualizar género',
+    'Failed to delete genre': 'Error al eliminar género',
+    'Genre deleted successfully': 'Género eliminado con éxito'
   }
 };
 

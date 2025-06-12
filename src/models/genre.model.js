@@ -8,12 +8,20 @@ const genreSchema = new mongoose.Schema(
       unique: true,
       trim: true
     },
+    nameEs: {
+      type: String,
+      trim: true
+    },
     type: {
       type: String,
       enum: ["movie", "series", "both"],
       default: "both"
     },
     description: {
+      type: String,
+      trim: true
+    },
+    descriptionEs: {
       type: String,
       trim: true
     },
