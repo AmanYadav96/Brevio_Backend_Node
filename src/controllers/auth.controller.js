@@ -7,10 +7,12 @@ import {
   FacebookAuthProvider,
 } from "firebase/auth";
 import { auth } from "../config/firebase.js";
-import User, { UserRole } from "../models/user.model.js";
+import User, { UserRole, UserStatus } from "../models/user.model.js";
+import OTP, { OtpPurpose } from "../models/otp.model.js";
 import { createStripeCustomer } from "../services/stripe.service.js";
 import { AppError } from "../utils/app-error.js";
 import authService from "../services/auth.service.js";
+import emailService from "../services/email.service.js";
 
 export const googleLogin = async (req, res) => {
   try {
@@ -354,3 +356,129 @@ export const appleAuth = async (req, res) => {
     })
   }
 }
+
+// Verify email with OTP
+export const verifyEmail = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and OTP are required'
+      });
+    }
+
+    // Verify OTP
+    const verificationResult = await OTP.verifyOTP(
+      email,
+      otp,
+      "email_verification"
+    );
+
+    if (!verificationResult.valid) {
+      return res.status(400).json({
+        success: false,
+        message: verificationResult.message
+      });
+    }
+
+    // Find user
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Update user status to active
+    user.status = UserStatus.ACTIVE;
+    user.isEmailVerified = true;
+    await user.save();
+
+    // Mark OTP as used
+    await verificationResult.otp.markAsUsed();
+
+    // Generate token
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Email verified successfully',
+      token,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        profilePicture: user.profilePicture,
+        isEmailVerified: user.isEmailVerified,
+        status: user.status
+      }
+    });
+  } catch (error) {
+    console.error('Email verification error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to verify email'
+    });
+  }
+};
+
+// Resend verification OTP
+export const resendVerificationOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+
+    // Check if user exists
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No user found with this email'
+      });
+    }
+
+    // Check if user is already verified
+    if (user.status === UserStatus.ACTIVE && user.isEmailVerified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is already verified'
+      });
+    }
+
+    // Generate OTP for email verification
+    const otp = await OTP.generateOTP(email, "email_verification");
+
+    // Send OTP email
+    await emailService.sendOtpEmail({
+      to: email,
+      name: user.name,
+      otp: otp.code,
+      purpose: "email_verification"
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Verification OTP resent to your email'
+    });
+  } catch (error) {
+    console.error('Resend verification OTP error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to resend verification OTP'
+    });
+  }
+};

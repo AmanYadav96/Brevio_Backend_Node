@@ -1,4 +1,6 @@
 import User, { AuthProvider, UserStatus, UserRole } from "../models/user.model.js"
+import OTP, { OtpPurpose } from "../models/otp.model.js"
+import emailService from "../services/email.service.js"
 import jwt from "jsonwebtoken"
 import { 
   GoogleAuthProvider, 
@@ -26,15 +28,27 @@ export class AuthService {
       throw new Error("User already exists with this email")
     }
 
-    // Create new user with default role
+    // Create new user with default role and INACTIVE status
     const user = await User.create({
       email,
       password,
       name,
       username,
       role: UserRole.USER, // Always default to USER role
-      authProvider: AuthProvider.LOCAL
+      authProvider: AuthProvider.LOCAL,
+      status: UserStatus.INACTIVE // Set status to inactive until email verification
     })
+
+    // Generate OTP for email verification
+    const otp = await OTP.generateOTP(email, "email_verification")
+
+    // Send OTP email
+    await emailService.sendOtpEmail({
+      to: email,
+      name: user.name,
+      otp: otp.code,
+      purpose: "email_verification"
+    });
 
     // Generate token
     const token = this.generateToken(user._id)
@@ -51,7 +65,9 @@ export class AuthService {
       throw new Error("Invalid email or password")
     }
 
-    if (user.status !== UserStatus.ACTIVE) {
+    if (user.status === UserStatus.INACTIVE) {
+      throw new Error("Please verify your email address before logging in")
+    } else if (user.status !== UserStatus.ACTIVE) {
       throw new Error(`Your account is ${user.status}`)
     }
 

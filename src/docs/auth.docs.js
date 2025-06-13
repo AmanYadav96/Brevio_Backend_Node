@@ -104,7 +104,7 @@
  *                 description: Required if role is creator
  *     responses:
  *       200:
- *         description: User registered successfully
+ *         description: User registered successfully and verification OTP sent to email
  *         content:
  *           application/json:
  *             schema:
@@ -151,10 +151,23 @@
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *             examples:
+ *               invalidCredentials:
+ *                 value:
+ *                   success: false
+ *                   message: Invalid email or password
+ *               unverifiedEmail:
+ *                 value:
+ *                   success: false
+ *                   message: Please verify your email address before logging in
+ *               accountSuspended:
+ *                 value:
+ *                   success: false
+ *                   message: Your account is suspended
  *
- * /api/auth/google:
+ * /api/auth/verify-email:
  *   post:
- *     summary: Authenticate with Google
+ *     summary: Verify email address with OTP
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
@@ -163,28 +176,77 @@
  *           schema:
  *             type: object
  *             required:
- *               - idToken
+ *               - email
+ *               - otp
  *             properties:
- *               idToken:
+ *               email:
  *                 type: string
- *                 description: Google ID token from client-side authentication
+ *                 format: email
+ *                 description: User's registered email address
+ *               otp:
+ *                 type: string
+ *                 description: One-time password received via email
  *     responses:
  *       200:
- *         description: Google authentication successful
+ *         description: Email verification successful
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/AuthResponse'
+ *               allOf:
+ *                 - $ref: '#/components/schemas/AuthResponse'
+ *                 - type: object
+ *                   properties:
+ *                     message:
+ *                       type: string
+ *                       example: Email verified successfully
+ *             example:
+ *               success: true
+ *               message: Email verified successfully
+ *               token: "jwt-token-here"
+ *               user:
+ *                 _id: "user-id"
+ *                 name: "John Doe"
+ *                 email: "john@example.com"
+ *                 role: "user"
+ *                 isEmailVerified: true
+ *                 status: "active"
  *       400:
- *         description: Invalid token or authentication failed
+ *         description: Invalid input or OTP
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *             examples:
+ *               missingFields:
+ *                 value:
+ *                   success: false
+ *                   message: Email and OTP are required
+ *               invalidOtp:
+ *                 value:
+ *                   success: false
+ *                   message: Invalid or expired OTP
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               message: User not found
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               message: Failed to verify email
  *
- * /api/auth/facebook:
+ * /api/auth/resend-verification:
  *   post:
- *     summary: Authenticate with Facebook
+ *     summary: Resend email verification OTP
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
@@ -193,62 +255,57 @@
  *           schema:
  *             type: object
  *             required:
- *               - accessToken
+ *               - email
  *             properties:
- *               accessToken:
+ *               email:
  *                 type: string
- *                 description: Facebook access token from client-side authentication
+ *                 format: email
+ *                 description: User's registered email address
  *     responses:
  *       200:
- *         description: Facebook authentication successful
+ *         description: Verification OTP resent successfully
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/AuthResponse'
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Verification OTP resent to your email
  *       400:
- *         description: Invalid token or authentication failed
+ *         description: Invalid input or already verified
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- *
- * /api/auth/apple:
- *   post:
- *     summary: Authenticate with Apple
- *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - idToken
- *             properties:
- *               idToken:
- *                 type: string
- *                 description: Apple ID token from client-side authentication
- *               userData:
- *                 type: object
- *                 description: User data from Apple (only provided on first login)
- *                 properties:
- *                   name:
- *                     type: string
- *                     description: User's name from Apple
- *                   email:
- *                     type: string
- *                     description: User's email from Apple
- *     responses:
- *       200:
- *         description: Apple authentication successful
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/AuthResponse'
- *       400:
- *         description: Invalid token or authentication failed
+ *             examples:
+ *               missingEmail:
+ *                 value:
+ *                   success: false
+ *                   message: Email is required
+ *               alreadyVerified:
+ *                 value:
+ *                   success: false
+ *                   message: Email is already verified
+ *       404:
+ *         description: User not found
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               message: No user found with this email
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               message: Failed to resend verification OTP
  */

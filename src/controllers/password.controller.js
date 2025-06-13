@@ -29,13 +29,14 @@ export const forgotPassword = async (req, res) => {
     }
 
     // Generate OTP for password reset
-    const otp = await OTP.generateOTP(email, OtpPurpose.PASSWORD_RESET);
+    const otp = await OTP.generateOTP(email, "password_reset");
 
     // Send OTP email
-    await emailService.sendOtpVerificationEmail({
+    await emailService.sendOtpEmail({
       to: email,
       name: user.name,
-      otp: otp.code
+      otp: otp.code,
+      purpose: "password_reset"
     });
 
     return res.status(200).json({
@@ -79,7 +80,7 @@ export const resetPassword = async (req, res) => {
     const verificationResult = await OTP.verifyOTP(
       email,
       otp,
-      OtpPurpose.PASSWORD_RESET
+      "password_reset"
     );
 
     if (!verificationResult.valid) {

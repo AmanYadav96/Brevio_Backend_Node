@@ -66,9 +66,9 @@ export const createComment = async (req, res) => {
 // Get comments for content
 export const getComments = async (req, res) => {
   try {
-    const { contentType, contentId, page = 1, limit = 10 } = req.query
+    const { contentType, contentId } = req.query
     
-    console.log('Query parameters:', { contentType, contentId, page, limit })
+    console.log('Query parameters:', { contentType, contentId })
     
     // Validate content type
     if (!['content', 'creatorContent'].includes(contentType)) {
@@ -83,7 +83,7 @@ export const getComments = async (req, res) => {
       status: 'active'
     })
     
-    // Get top-level comments (not replies)
+    // Get all top-level comments (not replies) without pagination
     const comments = await Comment.find({
       contentType,
       contentId,
@@ -91,8 +91,6 @@ export const getComments = async (req, res) => {
       status: 'active'
     })
       .sort({ createdAt: -1 })
-      .skip((parseInt(page) - 1) * parseInt(limit))
-      .limit(parseInt(limit))
       .populate('user', 'name profilePicture')
       .populate({
         path: 'replies',
@@ -103,21 +101,9 @@ export const getComments = async (req, res) => {
     
     console.log(`Found ${comments.length} comments`)
     
-    const total = await Comment.countDocuments({
-      contentType,
-      contentId,
-      parentComment: null,
-      status: 'active'
-    })
-    
     return res.json({
       success: true,
-      comments,
-      pagination: {
-        total,
-        page: parseInt(page),
-        pages: Math.ceil(total / parseInt(limit))
-      }
+      comments
     })
   } catch (error) {
     console.error('Get comments error:', error)

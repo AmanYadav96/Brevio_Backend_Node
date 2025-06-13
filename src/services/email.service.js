@@ -408,27 +408,58 @@ class EmailService {
   }
 
   /**
-   * Send OTP verification email
+   * Send OTP verification email (legacy method - calls sendOtpEmail)
    * @param {Object} options Email options
    * @returns {Promise<Object>} Email send result
    */
   async sendOtpVerificationEmail(options) {
+    return this.sendOtpEmail({
+      ...options,
+      purpose: "email_verification"
+    });
+  }
+
+  /**
+   * Send OTP email for verification or password reset
+   * @param {Object} options Email options
+   * @param {string} options.to Recipient email
+   * @param {string} options.name Recipient name
+   * @param {string} options.otp OTP code
+   * @param {string} options.purpose Purpose of OTP (verification or reset)
+   * @returns {Promise<Object>} Email send result
+   */
+  async sendOtpEmail(options) {
     try {
-      const { to, name, otp } = options;
+      const { to, name, otp, purpose } = options;
       
       // Get current year for footer
       const currentYear = new Date().getFullYear();
+      
+      // Set subject and title based on purpose
+      let subject, title, actionText, instructionText;
+      
+      if (purpose === "password_reset") {
+        subject = 'Código de restablecimiento de contraseña';
+        title = 'Password Reset';
+        actionText = 'Aquí tienes tu código para restablecer tu contraseña:';
+        instructionText = 'Este código es de un solo uso y caduca en unos minutos. Si no solicitaste restablecer tu contraseña, ignora este mensaje o contáctanos.';
+      } else { // Default to email_verification
+        subject = 'Código de verificación OTP';
+        title = 'OTP Verification';
+        actionText = 'Aquí tienes tu código para entrar en Brevio:';
+        instructionText = 'Este código es de un solo uso y caduca en unos minutos, así que date prisa. Si no pediste este código, ignora este mensaje o contáctanos.';
+      }
       
       // Send mail with defined transport object
       const info = await this.transporter.sendMail({
         from: `"Brevio Team" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
         to,
-        subject: 'Código de verificación OTP',
+        subject: subject,
         html: `
           <!DOCTYPE html>
           <html>
           <head>
-            <title>OTP Verification</title>
+            <title>${title}</title>
             <style>
               body {
                 font-family: Arial, sans-serif;
@@ -451,13 +482,6 @@ class EmailService {
                 color: white;
                 padding: 20px;
                 text-align: center;
-              }
-
-              .logo {
-                display: block;
-                margin: 0 auto 10px;
-                max-width: 160px;
-                height: 40px;
               }
 
               .content {
@@ -485,15 +509,13 @@ class EmailService {
           <body>
             <div class="container">
               <div class="header">
-                <img src="cid:brevialogo" alt="Brevio Logo" class="logo" />
-                <h2>OTP Verification</h2>
+                <h2>${title}</h2>
               </div>
               <div class="content">
                 <p>Hola, ${name}</p>
-                <p>Aquí tienes tu código para entrar en Brevio:</p>
+                <p>${actionText}</p>
                 <div class="otp-code">${otp}</div>
-                <p>Este código es de un solo uso y caduca en unos minutos, así que date prisa.</p>
-                <p>Si no pediste este código, ignora este mensaje o contáctanos.</p>
+                <p>${instructionText}</p>
               </div>
               <div class="footer">
                 <p>This email was sent by Brevio</p>
@@ -502,20 +524,14 @@ class EmailService {
             </div>
           </body>
           </html>
-        `,
-        attachments: [
-          {
-            filename: 'brevio-logo.png',
-            path: process.env.LOGO_PATH || 'https://brevio.online/logo.png',
-            cid: 'brevialogo'
-          }
-        ]
+        `
+        // Removed logo attachment that was causing 404 error
       });
       
-      console.log('OTP verification email sent:', info.messageId);
+      console.log(`${purpose} OTP email sent:`, info.messageId);
       return info;
     } catch (error) {
-      console.error('Error sending OTP verification email:', error);
+      console.error(`Error sending ${options.purpose} OTP email:`, error);
       throw error;
     }
   }

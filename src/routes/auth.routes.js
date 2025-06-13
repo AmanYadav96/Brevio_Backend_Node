@@ -5,7 +5,9 @@ import {
   googleLogin, 
   facebookAuth, 
   appleAuth,
-  becomeCreator 
+  becomeCreator,
+  verifyEmail,
+  resendVerificationOTP
 } from "../controllers/auth.controller.js";
 import { protect } from "../middlewares/auth.middleware.js";
 
@@ -14,6 +16,10 @@ const router = express.Router();
 // Email/password authentication
 router.post("/register", register);
 router.post("/login", login);
+
+// Email verification
+router.post("/verify-email", verifyEmail);
+router.post("/resend-verification", resendVerificationOTP);
 
 // Social authentication
 router.post("/google", googleLogin);

@@ -47,9 +47,10 @@ otpSchema.index({ email: 1, purpose: 1 })
 otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 })
 
 // Static method to generate OTP
+// Static method to generate OTP
 otpSchema.statics.generateOTP = function(email, purpose) {
-  // Generate a 6-digit OTP
-  const code = crypto.randomInt(100000, 999999).toString()
+  // Generate a 4-digit OTP
+  const code = crypto.randomInt(1000, 9999).toString()
   return this.create({
     email,
     code,
