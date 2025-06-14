@@ -435,19 +435,22 @@ class EmailService {
       // Get current year for footer
       const currentYear = new Date().getFullYear();
       
-      // Set subject and title based on purpose
+      // Set subject and title based on purpose and language
       let subject, title, actionText, instructionText;
       
+      // Determine if email is for Spanish user (can be enhanced with more robust detection)
+      const isSpanish = to.endsWith('.es') || options.language === 'es';
+      
       if (purpose === "password_reset") {
-        subject = 'Código de restablecimiento de contraseña';
-        title = 'Password Reset';
-        actionText = 'Aquí tienes tu código para restablecer tu contraseña:';
-        instructionText = 'Este código es de un solo uso y caduca en unos minutos. Si no solicitaste restablecer tu contraseña, ignora este mensaje o contáctanos.';
+        subject = isSpanish ? 'Código de restablecimiento de contraseña' : 'Password Reset Code';
+        title = isSpanish ? 'Restablecimiento de Contraseña' : 'Password Reset';
+        actionText = isSpanish ? 'Aquí tienes tu código para restablecer tu contraseña:' : 'Here is your code to reset your password:';
+        instructionText = isSpanish ? 'Este código es de un solo uso y caduca en unos minutos. Si no solicitaste restablecer tu contraseña, ignora este mensaje o contáctanos.' : 'This code is one-time use and expires in a few minutes. If you did not request a password reset, please ignore this email or contact us.';
       } else { // Default to email_verification
-        subject = 'Código de verificación OTP';
-        title = 'OTP Verification';
-        actionText = 'Aquí tienes tu código para entrar en Brevio:';
-        instructionText = 'Este código es de un solo uso y caduca en unos minutos, así que date prisa. Si no pediste este código, ignora este mensaje o contáctanos.';
+        subject = isSpanish ? 'Código de verificación' : 'OTP Verification Code';
+        title = isSpanish ? 'Verificación de Código' : 'OTP Verification';
+        actionText = isSpanish ? 'Aquí tienes tu código para entrar en Brevio:' : 'Here is your OTP code to access Brevio:';
+        instructionText = isSpanish ? 'Este código es de un solo uso y caduca en unos minutos, así que date prisa. Si no pediste este código, ignora este mensaje o contáctanos.' : 'This code is one-time use and expires in a few minutes, so hurry. If you did not request this code, please ignore this email or contact us.';
       }
       
       // Send mail with defined transport object
