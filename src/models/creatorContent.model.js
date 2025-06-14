@@ -243,9 +243,9 @@ creatorContentSchema.pre('validate', function(next) {
     if (!this.videoUrl) {
       this.invalidate('videoUrl', 'Video URL is required for short films')
     }
-    if (!this.duration) {
-      this.invalidate('duration', 'Duration is required for short films')
-    }
+    // if (!this.duration) {
+    //   this.invalidate('duration', 'Duration is required for short films')
+    // }
   }
   
   // For SERIES, at least one season is required

@@ -760,11 +760,11 @@ export const uploadMediaAssets = async (req, res) => {
     
     // Update media assets
     content.mediaAssets = {
-      thumbnail: uploads.thumbnail || content.mediaAssets?.thumbnail || '',
-      verticalBanner: uploads.verticalBanner || content.mediaAssets?.verticalBanner || '',
-      horizontalBanner: uploads.horizontalBanner || content.mediaAssets?.horizontalBanner || '',
-      trailer: uploads.trailer || content.mediaAssets?.trailer || '',
-      trailerDuration: uploads.trailerDuration || content.mediaAssets?.trailerDuration || 0
+      thumbnail: uploads.thumbnail?.url || content.mediaAssets?.thumbnail || '',
+      verticalBanner: uploads.verticalBanner?.url || content.mediaAssets?.verticalBanner || '',
+      horizontalBanner: uploads.horizontalBanner?.url || content.mediaAssets?.horizontalBanner || '',
+      trailer: uploads.trailer?.url || content.mediaAssets?.trailer || '',
+      trailerDuration: uploads.trailer?.duration || content.mediaAssets?.trailerDuration || 0
     }
     
     // Update status if this completes the content
