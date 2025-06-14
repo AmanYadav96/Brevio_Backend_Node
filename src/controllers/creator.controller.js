@@ -318,3 +318,66 @@ export const getCreatorProfileById = async (req, res) => {
     });
   }
 };
+
+/**
+ * Search creators by name or username
+ * @param {Object} req - Request
+ * @param {Object} res - Response
+ * @returns {Object} List of creators matching search criteria
+ */
+export const searchCreators = async (req, res) => {
+  try {
+    const {
+      search = '',
+      page = 1,
+      limit = 10,
+      sort = 'createdAt',
+      order = 'desc'
+    } = req.query;
+    
+    const query = { role: UserRole.CREATOR };
+    
+    // Apply search filter if provided
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { username: { $regex: search, $options: 'i' } },
+        { bio: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Determine sort order
+    const sortOptions = {};
+    sortOptions[sort] = order === 'asc' ? 1 : -1;
+    
+    // Execute query
+    const [creators, total] = await Promise.all([
+      User.find(query)
+        .select('_id name username bio profilePicture createdAt')
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(parseInt(limit)),
+      User.countDocuments(query)
+    ]);
+    
+    return res.json({
+      success: true,
+      creators,
+      pagination: {
+        total,
+        pages: Math.ceil(total / parseInt(limit)),
+        page: parseInt(page),
+        limit: parseInt(limit)
+      }
+    });
+  } catch (error) {
+    console.error('Search creators error:', error);
+    return res.status(error.statusCode || 500).json({ 
+      success: false, 
+      message: error.message || 'Failed to search creators' 
+    });
+  }
+};

@@ -450,66 +450,70 @@ export const getAllContent = async (req, res) => {
       orientation,
       status,
       creatorId,
+      genre,  // Add genre filter
       search,
       sort = 'createdAt',
       order = 'desc'
-    } = req.query
+    } = req.query;
     
-    const query = {}
+    const query = {};
     
     // Apply filters
-    if (contentType) query.contentType = contentType
-    if (orientation) query.orientation = orientation
-    if (status) query.status = status
-    if (creatorId) query.creator = creatorId
+    if (contentType) query.contentType = contentType;
+    if (orientation) query.orientation = orientation;
+    if (status) query.status = status;
+    if (creatorId) query.creator = creatorId;
+    if (genre) query.genre = genre;  // Add genre filter
     
     // Search by title or description
     if (search) {
       query.$or = [
         { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
-      ]
+        { description: { $regex: search, $options: 'i' } },
+        { tags: { $regex: search, $options: 'i' } }  // Also search in tags
+      ];
     }
     
     // Only show published content for non-admin users
-    const user = req.user
+    const user = req.user;
     if (!user || user.role !== UserRole.ADMIN) {
-      query.status = 'published'
+      query.status = 'published';
     }
     
     // Calculate pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit)
+    const skip = (parseInt(page) - 1) * parseInt(limit);
     
     // Determine sort order
-    const sortOptions = {}
-    sortOptions[sort] = order === 'asc' ? 1 : -1
+    const sortOptions = {};
+    sortOptions[sort] = order === 'asc' ? 1 : -1;
     
     // Execute query
     const [content, total] = await Promise.all([
       CreatorContent.find(query)
         .populate('creator', 'name username profilePicture')
+        .populate('genre', 'name nameEs')  // Populate genre information
         .sort(sortOptions)
         .skip(skip)
         .limit(parseInt(limit)),
       CreatorContent.countDocuments(query)
-    ])
+    ]);
     
     return res.json({
       success: true,
       content,
       pagination: {
         total,
+        pages: Math.ceil(total / parseInt(limit)),
         page: parseInt(page),
-        limit: parseInt(limit),
-        pages: Math.ceil(total / parseInt(limit))
+        limit: parseInt(limit)
       }
-    })
+    });
   } catch (error) {
-    console.error("Get all content error:", error)
+    console.error("Get all content error:", error);
     return res.status(500).json({ 
       success: false, 
       message: error.message 
-    })
+    });
   }
 }
 

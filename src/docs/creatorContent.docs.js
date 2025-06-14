@@ -393,10 +393,15 @@
  *           type: string
  *         description: Filter by channel ID
  *       - in: query
+ *         name: genre
+ *         schema:
+ *           type: string
+ *         description: Filter by genre ID
+ *       - in: query
  *         name: search
  *         schema:
  *           type: string
- *         description: Search in title and description
+ *         description: Search in title, description, and tags
  *       - in: query
  *         name: sort
  *         schema:

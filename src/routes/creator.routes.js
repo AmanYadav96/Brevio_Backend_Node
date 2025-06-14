@@ -3,13 +3,15 @@ import { protect } from "../middlewares/auth.middleware.js"
 import { 
   getCreatorDashboard, 
   getCreatorStats,
-  getCreatorProfileById 
+  getCreatorProfileById,
+  searchCreators 
 } from "../controllers/creator.controller.js"
 
 const router = express.Router()
 
-// Public route - no authentication required
+// Public routes - no authentication required
 router.get("/profile/:creatorId", getCreatorProfileById)
+router.get("/search", searchCreators)
 
 // All routes below require authentication
 router.use(protect)
