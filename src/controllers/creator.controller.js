@@ -245,7 +245,8 @@ export const getCreatorProfileById = async (req, res) => {
         creator: creatorId,
         status: 'published'
       })
-        .select('_id title contentType mediaAssets.thumbnail views likes createdAt')
+        .select('_id title contentType mediaAssets.thumbnail views likes createdAt ageRating genre')
+        .populate('genre', 'name nameEs') // Populate genre data
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
@@ -282,7 +283,9 @@ export const getCreatorProfileById = async (req, res) => {
       thumbnail: item.mediaAssets?.thumbnail || '',
       views: item.views || 0,
       likes: item.likes || 0,
-      createdAt: item.createdAt
+      createdAt: item.createdAt,
+      ageRating: item.ageRating || null, // Include content rating
+      genre: item.genre || null // Include genre data
     }));
     
     return res.json({
