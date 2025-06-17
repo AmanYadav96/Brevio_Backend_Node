@@ -156,7 +156,8 @@ export const getCreatorStats = async (req, res) => {
     
     // Get all content created by this creator
     const creatorContent = await CreatorContent.find({ creator: creatorId })
-      .select('_id title description contentType status views likes createdAt mediaAssets')
+      .select('_id title description contentType status views likes createdAt mediaAssets ageRating genre')
+      .populate('genre', 'name nameEs')
       .sort({ createdAt: -1 });
     
     // Get content counts by type and status

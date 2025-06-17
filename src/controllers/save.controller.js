@@ -87,6 +87,7 @@ export const checkSaved = async (req, res) => {
 }
 
 // Get user's saved content
+// Get user's saved content
 export const getSavedContent = async (req, res) => {
   try {
     const userId = req.user._id
@@ -117,8 +118,12 @@ export const getSavedContent = async (req, res) => {
         .limit(parseInt(limit))
         .populate({
           path: 'contentId',
-          select: 'title thumbnail description views duration createdAt',
-          model: contentType === 'content' ? 'Content' : 'CreatorContent'
+          select: 'title thumbnail description views duration createdAt ageRating genre',
+          model: contentType === 'content' ? 'Content' : 'CreatorContent',
+          populate: {
+            path: 'genre',
+            select: 'name nameEs'
+          }
         }),
       Save.countDocuments(query)
     ])
