@@ -446,6 +446,9 @@ export const getContentById = async (req, res) => {
 // Add this import at the top of the file
 import { transformAllUrls } from '../utils/cloudStorage.js';
 
+// Import the utility function at the top of the file
+import { getBlockedUserIds } from './userBlock.controller.js';
+
 // Get all content (with filters)
 export const getAllContent = async (req, res) => {
   try {
@@ -492,6 +495,14 @@ export const getAllContent = async (req, res) => {
     const user = req.user;
     if (!user || user.role !== UserRole.ADMIN) {
       query.status = 'published';
+    }
+    
+    // Filter out content from blocked users if user is authenticated
+    if (user) {
+      const blockedUserIds = await getBlockedUserIds(user._id);
+      if (blockedUserIds.length > 0) {
+        query.creator = { $nin: blockedUserIds };
+      }
     }
     
     // Calculate pagination

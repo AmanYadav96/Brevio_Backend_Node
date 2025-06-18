@@ -45,6 +45,7 @@ import likeRoutes from './src/routes/like.routes.js'
 import commentRoutes from './src/routes/comment.routes.js'
 import saveRoutes from './src/routes/save.routes.js'
 import passwordRoutes from './src/routes/password.routes.js'
+import UserBlock from './src/routes/userBlock.routes.js';
 
 // Add these lines where you register other routes
 
@@ -105,6 +106,7 @@ app.use(languageMiddleware);
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/user-blocks", UserBlock);
 app.use("/api/creators", creatorRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/videos", videoRoutes);

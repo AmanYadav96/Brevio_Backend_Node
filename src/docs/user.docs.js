@@ -156,6 +156,34 @@
  *       500:
  *         description: Server error
  *
+ * /api/users/account:
+ *   delete:
+ *     summary: Delete user's own account
+ *     description: Allows users to delete their own account and all associated data
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Account deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Your account has been deleted successfully
+ *       401:
+ *         description: Unauthorized - User not logged in
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error - Failed to delete account
+ *
  * /api/admin/users:
  *   get:
  *     summary: Get all users (Admin only)

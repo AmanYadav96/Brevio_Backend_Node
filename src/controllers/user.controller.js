@@ -1,5 +1,13 @@
 import User from "../models/user.model.js"
 import { AppError } from "../utils/app-error.js"
+import mongoose from "mongoose"
+import Save from "../models/save.model.js"
+import Like from "../models/like.model.js"
+import Comment from "../models/comment.model.js"
+import ChannelSubscription from "../models/channelSubscription.model.js"
+import VideoView from "../models/videoView.model.js"
+import Donation from "../models/donation.model.js"
+import Report from "../models/report.model.js"
 
 // Get all users (for admin)
 export const getAllUsers = async (req, res) => {
@@ -264,3 +272,67 @@ export const getUserStats = async (req, res) => {
     console.error("Get user stats error:", error)
     return res.status(500).json({ success: false, message: "Failed to fetch user statistics" })
   }}
+
+// Delete user account (for the user themselves)
+export const deleteUserAccount = async (req, res) => {
+  try {
+    const userId = req.user._id; // Get the authenticated user's ID
+    
+    // Start a session for transaction
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    
+    try {
+      // Delete user-related data from various collections
+      await Promise.all([
+        // Delete user's saved content
+        Save.deleteMany({ user: userId }, { session }),
+        
+        // Delete user's likes
+        Like.deleteMany({ user: userId }, { session }),
+        
+        // Delete user's comments
+        Comment.deleteMany({ user: userId }, { session }),
+        
+        // Delete user's channel subscriptions
+        ChannelSubscription.deleteMany({ user: userId }, { session }),
+        
+        // Delete user's video views
+        VideoView.deleteMany({ viewer: userId }, { session }),
+        
+        // Delete user's donations
+        Donation.deleteMany({ userId: userId }, { session }),
+        
+        // Delete user's reports
+        Report.deleteMany({ reporterId: userId }, { session }),
+      ]);
+      
+      // Finally, delete the user
+      const deletedUser = await User.findByIdAndDelete(userId).session(session);
+      
+      if (!deletedUser) {
+        throw new AppError("User not found", 404);
+      }
+      
+      // Commit the transaction
+      await session.commitTransaction();
+      session.endSession();
+      
+      return res.json({
+        success: true,
+        message: "Your account has been deleted successfully"
+      });
+    } catch (error) {
+      // Abort transaction on error
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
+  } catch (error) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
+    console.error("Delete user account error:", error);
+    return res.status(500).json({ success: false, message: "Failed to delete your account" });
+  }
+};

@@ -6,7 +6,8 @@ import {
   deleteUser, 
   getUserStats,
   updateUserProfile,
-  getUserProfile
+  getUserProfile,
+  deleteUserAccount // Add this import
 } from '../controllers/user.controller.js'
 import { protect, restrictTo } from '../middlewares/auth.middleware.js'
 import { handleUpload, optionalUpload } from '../middlewares/upload.middleware.js'
@@ -19,6 +20,7 @@ router.use(protect)
 // User profile routes (for regular users)
 router.get('/profile', getUserProfile)
 router.patch('/profile', optionalUpload, updateUserProfile)
+router.delete('/account', deleteUserAccount) // Add this route
 
 // Admin routes
 router.get('/', restrictTo('admin'), getAllUsers)
