@@ -427,10 +427,13 @@ export const getContentById = async (req, res) => {
       })
     }
     
+    // Transform URLs in content before sending to client
+    const transformedContent = transformAllUrls(content);
+    
     return res.json({ 
       success: true, 
-      content
-    })
+      content: transformedContent
+    });
   } catch (error) {
     console.error("Get content error:", error)
     return res.status(500).json({ 
@@ -439,6 +442,9 @@ export const getContentById = async (req, res) => {
     })
   }
 }
+
+// Add this import at the top of the file
+import { transformAllUrls } from '../utils/cloudStorage.js';
 
 // Get all content (with filters)
 export const getAllContent = async (req, res) => {
@@ -450,7 +456,7 @@ export const getAllContent = async (req, res) => {
       orientation,
       status,
       creatorId,
-      genre,  // Add genre filter
+      genre,
       search,
       sort = 'createdAt',
       order = 'desc'
@@ -463,15 +469,23 @@ export const getAllContent = async (req, res) => {
     if (orientation) query.orientation = orientation;
     if (status) query.status = status;
     if (creatorId) query.creator = creatorId;
-    if (genre) query.genre = genre;  // Add genre filter
+    if (genre) query.genre = genre;
     
-    // Search by title or description
+    // Use text index for search if available, otherwise use regex
     if (search) {
-      query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { tags: { $regex: search, $options: 'i' } }  // Also search in tags
-      ];
+      // Check if text index exists
+      const indexes = await CreatorContent.collection.indexes();
+      const hasTextIndex = indexes.some(index => index.textIndexVersion);
+      
+      if (hasTextIndex) {
+        query.$text = { $search: search };
+      } else {
+        query.$or = [
+          { title: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } },
+          { tags: { $regex: search, $options: 'i' } }
+        ];
+      }
     }
     
     // Only show published content for non-admin users
@@ -487,20 +501,28 @@ export const getAllContent = async (req, res) => {
     const sortOptions = {};
     sortOptions[sort] = order === 'asc' ? 1 : -1;
     
-    // Execute query
+    // Use lean() to get plain JavaScript objects instead of Mongoose documents
+    // This is much faster and uses less memory
     const [content, total] = await Promise.all([
       CreatorContent.find(query)
         .populate('creator', 'name username profilePicture')
-        .populate('genre', 'name nameEs')  // Populate genre information
+        .populate('genre', 'name nameEs')
         .sort(sortOptions)
         .skip(skip)
-        .limit(parseInt(limit)),
+        .limit(parseInt(limit))
+        .lean(),
       CreatorContent.countDocuments(query)
     ]);
     
+    // Transform URLs in content before sending to client
+    const transformedContent = transformAllUrls(content);
+    
+    // Shuffle the content array if needed
+    const shuffledContent = [...transformedContent].sort(() => Math.random() - 0.5);
+    
     return res.json({
       success: true,
-      content,
+      content: shuffledContent,
       pagination: {
         total,
         pages: Math.ceil(total / parseInt(limit)),
@@ -509,13 +531,13 @@ export const getAllContent = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Get all content error:", error);
-    return res.status(500).json({ 
-      success: false, 
-      message: error.message 
+    console.error('Get all content error:', error);
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Failed to fetch content'
     });
   }
-}
+};
 
 // Purchase educational content
 export const purchaseEducationalContent = async (req, res) => {

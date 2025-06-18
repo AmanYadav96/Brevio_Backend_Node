@@ -268,4 +268,11 @@ creatorContentSchema.pre('validate', function(next) {
   next()
 })
 
+// Add at the end of the schema definition, before exporting
+creatorContentSchema.index({ creator: 1 });
+creatorContentSchema.index({ status: 1 });
+creatorContentSchema.index({ contentType: 1 });
+creatorContentSchema.index({ genre: 1 });
+creatorContentSchema.index({ createdAt: -1 });
+creatorContentSchema.index({ title: 'text', description: 'text', tags: 'text' });
 export default mongoose.model("CreatorContent", creatorContentSchema)

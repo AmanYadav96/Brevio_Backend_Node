@@ -121,3 +121,54 @@ export const deleteFromR2 = async (fileUrl) => {
     throw new Error('Failed to delete file from R2')
   }
 }
+
+
+// Function to replace old CDN URL with new CDN URL at retrieval time
+export const transformCdnUrl = (url) => {
+  if (!url) return url;
+  
+  // Check if url is a string before using replace
+  if (typeof url !== 'string') return url;
+  
+  // Replace old CDN URL with new CDN URL
+  return url.replace(
+    'https://pub-1a008632cfbe443fa4f631d71332310d.r2.dev/', 
+    'https://bvideo.b-cdn.net/'
+  );
+}
+
+// Function to transform all URLs in an object recursively
+export const transformAllUrls = (obj) => {
+  if (!obj) return obj;
+  
+  if (typeof obj === 'string') {
+    return transformCdnUrl(obj);
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(item => transformAllUrls(item));
+  }
+  
+  if (typeof obj === 'object') {
+    // Handle Mongoose documents by converting to plain objects first
+    const plainObj = obj.toObject ? obj.toObject() : obj;
+    
+    const transformed = {};
+    for (const key in plainObj) {
+      if (plainObj.hasOwnProperty(key)) {
+        // Skip internal Mongoose properties that might cause circular references
+        if (key.startsWith('_') && key !== '_id') continue;
+        
+        // For specific URL fields, transform directly
+        if (['url', 'fileUrl', 'videoUrl', 'thumbnailUrl', 'bannerUrl', 'profilePicture', 'photo', 'contractFile', 'thumbnail', 'verticalBanner', 'horizontalBanner', 'trailer'].includes(key)) {
+          transformed[key] = transformCdnUrl(plainObj[key]);
+        } else {
+          transformed[key] = transformAllUrls(plainObj[key]);
+        }
+      }
+    }
+    return transformed;
+  }
+  
+  return obj;
+}

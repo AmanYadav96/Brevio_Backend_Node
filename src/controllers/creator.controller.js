@@ -220,11 +220,11 @@ export const getCreatorProfileById = async (req, res) => {
       throw new AppError('Invalid creator ID', 400);
     }
     
-    // Find creator by ID
+    // Find creator by ID - use lean() for better performance
     const creator = await User.findOne({ 
       _id: creatorId, 
       role: UserRole.CREATOR 
-    }).select('_id name username bio profilePicture createdAt');
+    }).select('_id name username bio profilePicture createdAt').lean();
     
     if (!creator) {
       throw new AppError('Creator not found', 404);
@@ -232,51 +232,54 @@ export const getCreatorProfileById = async (req, res) => {
     
     // Get creator's content with pagination
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 12; // Instagram-like grid
+    const limit = parseInt(req.query.limit) || 12;
     const skip = (page - 1) * limit;
     
-    // Find creator's channel
+    // Find creator's channel - use lean()
     const channel = await Channel.findOne({
       'owner.email': creator.email
-    }).select('_id name thumbnail type');
+    }).select('_id name thumbnail type').lean();
     
-    // Get published content only
+    // Get content IDs first (more efficient)
+    const contentIds = await CreatorContent.find({ 
+      creator: creatorId,
+      status: 'published'
+    }).select('_id').lean();
+    
+    const idArray = contentIds.map(item => item._id);
+    
+    // Run queries in parallel for better performance
     const [content, totalContent, subscribers, totalLikes, totalViews] = await Promise.all([
       CreatorContent.find({ 
         creator: creatorId,
         status: 'published'
       })
         .select('_id title contentType mediaAssets.thumbnail views likes createdAt ageRating genre')
-        .populate('genre', 'name nameEs') // Populate genre data
+        .populate('genre', 'name nameEs')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit),
+        .limit(limit)
+        .lean(),
       
-      CreatorContent.countDocuments({ 
-        creator: creatorId,
-        status: 'published'
-      }),
+      contentIds.length, // We already have the count from the previous query
       
-      // Count subscribers/followers if channel exists
       channel ? ChannelSubscription.countDocuments({
         channel: channel._id,
         isActive: true
       }) : 0,
       
-      // Count total likes across all content
       Like.countDocuments({
         contentType: 'creatorContent',
-        contentId: { $in: await CreatorContent.find({ creator: creatorId }).distinct('_id') }
+        contentId: { $in: idArray }
       }),
       
-      // Calculate total views
       CreatorContent.aggregate([
         { $match: { creator: new mongoose.Types.ObjectId(creatorId) } },
         { $group: { _id: null, totalViews: { $sum: "$views" } } }
       ])
     ]);
     
-    // Format content for Instagram-like grid
+    // Format content
     const formattedContent = content.map(item => ({
       id: item._id,
       title: item.title,
@@ -285,13 +288,16 @@ export const getCreatorProfileById = async (req, res) => {
       views: item.views || 0,
       likes: item.likes || 0,
       createdAt: item.createdAt,
-      ageRating: item.ageRating || null, // Include content rating
-      genre: item.genre || null // Include genre data
+      ageRating: item.ageRating || null,
+      genre: item.genre || null
     }));
+    
+    // Transform URLs in the response
+    const transformedContent = transformAllUrls(formattedContent);
     
     return res.json({
       success: true,
-      profile: {
+      profile: transformAllUrls({
         id: creator._id,
         name: creator.name,
         username: creator.username,
@@ -305,8 +311,8 @@ export const getCreatorProfileById = async (req, res) => {
           likes: totalLikes,
           views: totalViews.length > 0 ? totalViews[0].totalViews : 0
         }
-      },
-      content: formattedContent,
+      }),
+      content: transformedContent,
       pagination: {
         total: totalContent,
         pages: Math.ceil(totalContent / limit),
