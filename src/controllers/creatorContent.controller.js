@@ -521,7 +521,7 @@ export const getAllContent = async (req, res) => {
         .sort(sortOptions)
         .skip(skip)
         .limit(parseInt(limit))
-        .lean(),
+        .lean(),  // This bypasses Mongoose's ObjectId-to-string conversion
       CreatorContent.countDocuments(query)
     ]);
     

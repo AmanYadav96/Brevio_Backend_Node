@@ -145,6 +145,17 @@ export const transformAllUrls = (obj) => {
     return transformCdnUrl(obj);
   }
   
+  // Handle MongoDB ObjectId instances directly
+  if (obj && typeof obj.toString === 'function' && obj.constructor && 
+      (obj.constructor.name === 'ObjectID' || obj.constructor.name === 'ObjectId')) {
+    return obj.toString();
+  }
+  
+  // Handle Buffer objects that might be ObjectIds
+  if (obj && obj.buffer && obj.subtype === 7) {
+    return obj.toString();
+  }
+  
   if (Array.isArray(obj)) {
     return obj.map(item => transformAllUrls(item));
   }
@@ -158,6 +169,22 @@ export const transformAllUrls = (obj) => {
       if (plainObj.hasOwnProperty(key)) {
         // Skip internal Mongoose properties that might cause circular references
         if (key.startsWith('_') && key !== '_id') continue;
+        
+        // Handle MongoDB ObjectIDs
+        if (plainObj[key] && plainObj[key].toString && 
+            ((plainObj[key].constructor && 
+              (plainObj[key].constructor.name === 'ObjectID' || 
+               plainObj[key].constructor.name === 'ObjectId')) || 
+             (plainObj[key].buffer && plainObj[key].subtype === 7))) {
+          transformed[key] = plainObj[key].toString();
+          continue;
+        }
+        
+        // Handle the specific case in your response where id is an object with a buffer property
+        if (key === 'id' && plainObj[key] && plainObj[key].buffer) {
+          transformed[key] = plainObj[key].toString();
+          continue;
+        }
         
         // For specific URL fields, transform directly
         if (['url', 'fileUrl', 'videoUrl', 'thumbnailUrl', 'bannerUrl', 'profilePicture', 'photo', 'contractFile', 'thumbnail', 'verticalBanner', 'horizontalBanner', 'trailer'].includes(key)) {

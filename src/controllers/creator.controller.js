@@ -7,6 +7,7 @@ import { AppError } from '../utils/app-error.js';
 import mongoose from 'mongoose';
 import Channel from '../models/channel.model.js';
 import ChannelSubscription from '../models/channelSubscription.model.js';
+import { transformAllUrls } from '../utils/cloudStorage.js';
 
 /**
  * Get creator dashboard statistics and data
@@ -298,7 +299,7 @@ export const getCreatorProfileById = async (req, res) => {
     return res.json({
       success: true,
       profile: transformAllUrls({
-        id: creator._id,
+        id: creator._id,  // This is where the ObjectId is being passed
         name: creator.name,
         username: creator.username,
         bio: creator.bio,
