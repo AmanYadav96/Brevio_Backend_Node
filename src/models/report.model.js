@@ -88,7 +88,10 @@ const reportSchema = new mongoose.Schema({
   
   // Proof file (uploaded to cloud storage)
   proofFile: {
-    type: String
+    url: String,
+    fileName: String,
+    fileSize: Number,
+    mimeType: String
   },
   
   // Report status and admin actions

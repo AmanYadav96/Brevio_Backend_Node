@@ -13,18 +13,36 @@ export const createReport = async (req, res) => {
     // Get the body from the request
     const body = req.body
     
+    // Enhanced logging
+    console.log('Request body:', JSON.stringify(body))
+    console.log('Content type received:', body.contentType)
+    console.log('Content type type:', typeof body.contentType)
+    console.log('Valid content types:', Object.values(ContentType))
+    console.log('Is content type valid?', Object.values(ContentType).includes(body.contentType))
+    console.log('Issue type received:', body.issueType)
+    console.log('Is issue type valid?', Object.values(ReportIssueType).includes(body.issueType))
+    console.log('Uploads:', uploads)
+    
     // Validate required fields
     if (!body.contentId || !body.contentType || !body.issueType || !body.description) {
+      console.log('Missing fields check failed:', {
+        contentId: !!body.contentId,
+        contentType: !!body.contentType,
+        issueType: !!body.issueType,
+        description: !!body.description
+      })
       return res.status(400).json(createError(400, 'Missing required fields'))
     }
     
     // Validate issue type
     if (!Object.values(ReportIssueType).includes(body.issueType)) {
+      console.log('Invalid issue type:', body.issueType)
       return res.status(400).json(createError(400, 'Invalid issue type'))
     }
     
     // Validate content type
     if (!Object.values(ContentType).includes(body.contentType)) {
+      console.log('Invalid content type:', body.contentType)
       return res.status(400).json(createError(400, 'Invalid content type'))
     }
     
