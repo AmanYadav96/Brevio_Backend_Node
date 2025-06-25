@@ -15,5 +15,6 @@ router.get('/creators', adminController.getAllCreators);
 router.get('/creators/:creatorId', adminController.getCreatorById);
 router.patch('/creators/:creatorId/block', adminController.toggleCreatorBlock);
 router.delete('/creators/:creatorId', adminController.deleteCreator);
+router.get('/content-review', adminController.getContentForReview);
 
 export default router;

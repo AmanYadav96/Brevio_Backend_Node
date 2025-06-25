@@ -311,3 +311,120 @@
  *       500:
  *         description: Server error
  */
+
+/**
+ * @swagger
+ * /api/admin/content-review:
+ *   get:
+ *     summary: Get creator content for admin review
+ *     description: Retrieves content for admin review with pending items first, followed by approved/rejected items
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of items per page
+ *       - in: query
+ *         name: contentType
+ *         schema:
+ *           type: string
+ *           enum: [shortFilm, series, educational]
+ *         description: Filter by content type
+ *       - in: query
+ *         name: creatorId
+ *         schema:
+ *           type: string
+ *         description: Filter by creator ID
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search by title, description, or tags
+ *       - in: query
+ *         name: sort
+ *         schema:
+ *           type: string
+ *           default: createdAt
+ *         description: Field to sort by
+ *       - in: query
+ *         name: order
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *         description: Sort order
+ *     responses:
+ *       200:
+ *         description: Content retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 content:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       contentType:
+ *                         type: string
+ *                         enum: [shortFilm, series, educational]
+ *                       status:
+ *                         type: string
+ *                         enum: [draft, processing, published, rejected, archived]
+ *                       adminApproved:
+ *                         type: boolean
+ *                       creator:
+ *                         type: object
+ *                         properties:
+ *                           _id:
+ *                             type: string
+ *                           name:
+ *                             type: string
+ *                           username:
+ *                             type: string
+ *                           profilePicture:
+ *                             type: string
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                       updatedAt:
+ *                         type: string
+ *                         format: date-time
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: number
+ *                     page:
+ *                       type: number
+ *                     limit:
+ *                       type: number
+ *                     pages:
+ *                       type: number
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Not an admin
+ *       500:
+ *         description: Server error
+ */

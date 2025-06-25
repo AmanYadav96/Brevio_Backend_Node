@@ -3,6 +3,8 @@ import CreatorContent, { ContentType } from '../models/creatorContent.model.js';
 import Contract, { ContractStatus } from '../models/contract.model.js';
 import { AppError } from '../utils/app-error.js';
 import mongoose from 'mongoose';
+// Add this import at the top of the file with the other imports
+import { transformAllUrls } from '../utils/cloudStorage.js';
 
 /**
  * Get admin dashboard statistics
@@ -390,6 +392,113 @@ export const deleteCreator = async (req, res) => {
     return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message
+    });
+  }
+};
+/**
+ * Get creator content for admin review
+ * @param {Object} req - Request
+ * @param {Object} res - Response
+ * @returns {Object} List of content with pagination
+ */
+export const getContentForReview = async (req, res) => {
+  try {
+    const user = req.user;
+    
+    // Check if user is admin
+    if (user.role !== UserRole.ADMIN) {
+      throw new AppError('Unauthorized access', 403);
+    }
+    
+    const {
+      page = 1,
+      limit = 10,
+      contentType,
+      creatorId,
+      search,
+      sort = 'createdAt',
+      order = 'desc'
+    } = req.query;
+    
+    const query = {};
+    
+    // Apply filters
+    if (contentType) query.contentType = contentType;
+    if (creatorId) query.creator = creatorId;
+    
+    // Use text index for search if available, otherwise use regex
+    if (search) {
+      // Check if text index exists
+      const indexes = await CreatorContent.collection.indexes();
+      const hasTextIndex = indexes.some(index => index.textIndexVersion);
+      
+      if (hasTextIndex) {
+        query.$text = { $search: search };
+      } else {
+        query.$or = [
+          { title: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } },
+          { tags: { $regex: search, $options: 'i' } }
+        ];
+      }
+    }
+    
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Determine sort order
+    const sortOptions = {};
+    sortOptions[sort] = order === 'asc' ? 1 : -1;
+    
+    // First, get all content matching the query
+    const allContent = await CreatorContent.find(query)
+      .populate('creator', 'name username profilePicture')
+      .populate('genre', 'name nameEs')
+      .lean();
+    
+    // Separate content into pending and reviewed (approved/rejected)
+    const pendingContent = allContent.filter(item => item.status === 'processing');
+    const reviewedContent = allContent.filter(item => item.status === 'published' || item.status === 'rejected');
+    
+    // Sort each group by the specified sort options
+    const sortFn = (a, b) => {
+      const aValue = a[sort];
+      const bValue = b[sort];
+      
+      if (order === 'asc') {
+        return aValue > bValue ? 1 : -1;
+      } else {
+        return aValue < bValue ? 1 : -1;
+      }
+    };
+    
+    pendingContent.sort(sortFn);
+    reviewedContent.sort(sortFn);
+    
+    // Combine the arrays with pending content first, followed by reviewed content
+    const sortedContent = [...pendingContent, ...reviewedContent];
+    
+    // Apply pagination
+    const paginatedContent = sortedContent.slice(skip, skip + parseInt(limit));
+    
+    // Transform URLs in content before sending to client
+    const transformedContent = transformAllUrls(paginatedContent);
+    
+    return res.json({
+      success: true,
+      content: transformedContent,
+      pagination: {
+        total: allContent.length,
+        pages: Math.ceil(allContent.length / parseInt(limit)),
+        page: parseInt(page),
+        limit: parseInt(limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get content for review error:', error);
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Failed to fetch content for review'
     });
   }
 };
