@@ -411,8 +411,6 @@ export const getContentForReview = async (req, res) => {
     }
     
     const {
-      page = 1,
-      limit = 10,
       contentType,
       creatorId,
       search,
@@ -443,14 +441,11 @@ export const getContentForReview = async (req, res) => {
       }
     }
     
-    // Calculate pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    
     // Determine sort order
     const sortOptions = {};
     sortOptions[sort] = order === 'asc' ? 1 : -1;
     
-    // First, get all content matching the query
+    // Get all content matching the query
     const allContent = await CreatorContent.find(query)
       .populate('creator', 'name username profilePicture')
       .populate('genre', 'name nameEs')
@@ -478,21 +473,13 @@ export const getContentForReview = async (req, res) => {
     // Combine the arrays with pending content first, followed by reviewed content
     const sortedContent = [...pendingContent, ...reviewedContent];
     
-    // Apply pagination
-    const paginatedContent = sortedContent.slice(skip, skip + parseInt(limit));
-    
     // Transform URLs in content before sending to client
-    const transformedContent = transformAllUrls(paginatedContent);
+    const transformedContent = transformAllUrls(sortedContent);
     
     return res.json({
       success: true,
       content: transformedContent,
-      pagination: {
-        total: allContent.length,
-        pages: Math.ceil(allContent.length / parseInt(limit)),
-        page: parseInt(page),
-        limit: parseInt(limit)
-      }
+      total: allContent.length
     });
   } catch (error) {
     console.error('Get content for review error:', error);
