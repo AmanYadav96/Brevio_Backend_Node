@@ -204,16 +204,26 @@ export const becomeCreator = async (req, res) => {
 export const register = async (req, res) => {
   try {
     const body = req.body
-    const { user, token } = await authService.registerWithEmail(body)
+    const result = await authService.registerWithEmail(body)
+    
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        isAlreadyRegistered: result.isAlreadyRegistered,
+        message: req.translate(result.message)
+      })
+    }
     
     return res.json({
       success: true,
-      token,
-      user
+      isAlreadyRegistered: false,
+      token: result.token,
+      user: result.user
     })
   } catch (error) {
     return res.status(400).json({
       success: false,
+      isAlreadyRegistered: false,
       message: req.translate(error.message)
     })
   }

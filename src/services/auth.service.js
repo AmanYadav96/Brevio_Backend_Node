@@ -25,7 +25,11 @@ export class AuthService {
     // Check if user already exists
     const existingUser = await User.findOne({ email })
     if (existingUser) {
-      throw new Error("User already exists with this email")
+      return {
+        success: false,
+        isAlreadyRegistered: true,
+        message: "User already exists with this email"
+      }
     }
 
     // Create new user with default role and INACTIVE status
@@ -53,7 +57,12 @@ export class AuthService {
     // Generate token
     const token = this.generateToken(user._id)
 
-    return { user, token }
+    return { 
+      success: true,
+      isAlreadyRegistered: false,
+      user, 
+      token 
+    }
   }
 
   // Login with email and password
