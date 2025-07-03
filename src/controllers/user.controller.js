@@ -275,64 +275,88 @@ export const getUserStats = async (req, res) => {
 
 // Delete user account (for the user themselves)
 export const deleteUserAccount = async (req, res) => {
+  console.log("Starting deleteUserAccount for user:", req.user._id);
   try {
     const userId = req.user._id; // Get the authenticated user's ID
+    console.log("User ID for deletion:", userId);
     
     // Start a session for transaction
+    console.log("Attempting to start MongoDB session");
     const session = await mongoose.startSession();
     session.startTransaction();
+    console.log("Transaction started successfully");
     
     try {
-      // Delete user-related data from various collections
-      await Promise.all([
-        // Delete user's saved content
-        Save.deleteMany({ user: userId }, { session }),
-        
-        // Delete user's likes
-        Like.deleteMany({ user: userId }, { session }),
-        
-        // Delete user's comments
-        Comment.deleteMany({ user: userId }, { session }),
-        
-        // Delete user's channel subscriptions
-        ChannelSubscription.deleteMany({ user: userId }, { session }),
-        
-        // Delete user's video views
-        VideoView.deleteMany({ viewer: userId }, { session }),
-        
-        // Delete user's donations
-        Donation.deleteMany({ userId: userId }, { session }),
-        
-        // Delete user's reports
-        Report.deleteMany({ reporterId: userId }, { session }),
-      ]);
+      console.log("Beginning deletion of user-related data");
+      
+      // Execute deletions sequentially instead of using Promise.all
+      // Delete user's saved content
+      const savedResult = await Save.deleteMany({ user: userId }, { session });
+      console.log(`Deleted ${savedResult.deletedCount} saved items`);
+      
+      // Delete user's likes
+      const likesResult = await Like.deleteMany({ user: userId }, { session });
+      console.log(`Deleted ${likesResult.deletedCount} likes`);
+      
+      // Delete user's comments
+      const commentsResult = await Comment.deleteMany({ user: userId }, { session });
+      console.log(`Deleted ${commentsResult.deletedCount} comments`);
+      
+      // Delete user's channel subscriptions
+      const subscriptionsResult = await ChannelSubscription.deleteMany({ user: userId }, { session });
+      console.log(`Deleted ${subscriptionsResult.deletedCount} channel subscriptions`);
+      
+      // Delete user's video views
+      const viewsResult = await VideoView.deleteMany({ viewer: userId }, { session });
+      console.log(`Deleted ${viewsResult.deletedCount} video views`);
+      
+      // Delete user's donations
+      const donationsResult = await Donation.deleteMany({ userId: userId }, { session });
+      console.log(`Deleted ${donationsResult.deletedCount} donations`);
+      
+      // Delete user's reports
+      const reportsResult = await Report.deleteMany({ reporterId: userId }, { session });
+      console.log(`Deleted ${reportsResult.deletedCount} reports`);
+      
+      console.log("All related data deletion completed");
       
       // Finally, delete the user
+      console.log("Attempting to delete user document");
       const deletedUser = await User.findByIdAndDelete(userId).session(session);
       
       if (!deletedUser) {
+        console.log("User not found for deletion");
         throw new AppError("User not found", 404);
       }
+      console.log("User document deleted successfully:", deletedUser._id);
       
       // Commit the transaction
+      console.log("Committing transaction");
       await session.commitTransaction();
+      console.log("Transaction committed successfully");
       session.endSession();
       
+      console.log("User account deletion completed successfully");
       return res.json({
         success: true,
         message: "Your account has been deleted successfully"
       });
     } catch (error) {
       // Abort transaction on error
+      console.error("Error in transaction, aborting:", error);
+      console.error("Error stack:", error.stack);
       await session.abortTransaction();
       session.endSession();
       throw error;
     }
   } catch (error) {
     if (error instanceof AppError) {
+      console.error("AppError in deleteUserAccount:", error.message, error.statusCode);
       return res.status(error.statusCode).json({ success: false, message: error.message });
     }
     console.error("Delete user account error:", error);
+    console.error("Error details:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    console.error("Error stack:", error.stack);
     return res.status(500).json({ success: false, message: "Failed to delete your account" });
   }
 };

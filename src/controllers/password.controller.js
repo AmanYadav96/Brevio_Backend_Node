@@ -58,10 +58,22 @@ export const forgotPassword = async (req, res) => {
  * @param {Object} res - Response object
  */
 export const resetPassword = async (req, res) => {
+  console.log('Password reset API called with email:', req.body.email);
   try {
     const { email, otp, newPassword } = req.body;
 
+    console.log('Reset password request parameters:', { 
+      email, 
+      otpProvided: !!otp, 
+      passwordLength: newPassword?.length 
+    });
+
     if (!email || !otp || !newPassword) {
+      console.log('Missing required fields:', { 
+        emailProvided: !!email, 
+        otpProvided: !!otp, 
+        passwordProvided: !!newPassword 
+      });
       return res.status(400).json({
         success: false,
         message: 'Email, OTP, and new password are required'
@@ -70,18 +82,31 @@ export const resetPassword = async (req, res) => {
 
     // Validate password
     if (newPassword.length < 8) {
+      console.log('Password validation failed: too short', { length: newPassword.length });
       return res.status(400).json({
         success: false,
         message: 'Password must be at least 8 characters long'
       });
     }
 
+    console.log('Attempting to verify OTP for email:', email);
     // Verify OTP
     const verificationResult = await OTP.verifyOTP(
       email,
       otp,
       "password_reset"
     );
+
+    console.log('OTP verification result:', { 
+      valid: verificationResult.valid, 
+      message: verificationResult.message,
+      otpDetails: verificationResult.valid ? {
+        id: verificationResult.otp._id,
+        createdAt: verificationResult.otp.createdAt,
+        expiresAt: verificationResult.otp.expiresAt,
+        isExpired: verificationResult.otp.expiresAt < new Date()
+      } : null
+    });
 
     if (!verificationResult.valid) {
       return res.status(400).json({
@@ -91,30 +116,49 @@ export const resetPassword = async (req, res) => {
     }
 
     // Find user
+    console.log('Looking up user with email:', email);
     const user = await User.findOne({ email }).select('+password');
+    
     if (!user) {
+      console.log('User not found with email:', email);
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
+    
+    console.log('User found:', { 
+      userId: user._id, 
+      name: user.name, 
+      hasPassword: !!user.password 
+    });
 
     // Update password
+    console.log('Updating password for user:', user._id);
     user.password = newPassword;
     await user.save();
+    console.log('Password updated successfully');
 
     // Mark OTP as used
+    console.log('Marking OTP as used');
     await verificationResult.otp.markAsUsed();
+    console.log('OTP marked as used successfully');
 
     return res.status(200).json({
       success: true,
       message: 'Password has been reset successfully'
     });
   } catch (error) {
-    console.error('Reset password error:', error);
+    console.error('Reset password error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      code: error.code
+    });
     return res.status(500).json({
       success: false,
-      message: 'Failed to reset password'
+      message: 'Failed to reset password',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

@@ -28,8 +28,8 @@ const otpSchema = new mongoose.Schema(
       type: Date,
       required: true,
       default: function() {
-        // OTP expires in 10 minutes by default
-        return new Date(Date.now() + 10 * 60 * 1000)
+        // OTP expires in 30 minutes (increased from 10 minutes)
+        return new Date(Date.now() + 30 * 60 * 1000)
       }
     },
     isUsed: {
