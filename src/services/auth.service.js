@@ -253,6 +253,7 @@ export class AuthService {
 
       // Check if user exists
       let user = await User.findOne({ email: userEmail })
+      const isAlreadyRegistered = !!user
 
       if (user) {
         // Update Apple profile if user exists
@@ -290,7 +291,7 @@ export class AuthService {
       // Generate token
       const token = this.generateToken(user._id)
 
-      return { user, token }
+      return { user, token, isAlreadyRegistered }
     } catch (error) {
       console.error("Apple auth error:", error)
       throw new Error("Apple authentication failed: " + error.message)

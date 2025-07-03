@@ -348,12 +348,13 @@ export const appleAuth = async (req, res) => {
       return res.status(400).json({ success: false, message: "ID token is required" })
     }
     
-    const { user, token } = await authService.appleAuth(idToken, userData || {})
+    const { user, token , isAlreadyRegistered} = await authService.appleAuth(idToken, userData || {})
     
     return res.json({
       success: true,
       token,
-      user
+      user,
+      isAlreadyRegistered
     })
   } catch (error) {
     console.error("Apple auth error:", error)
