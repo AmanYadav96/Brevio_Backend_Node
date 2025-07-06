@@ -25,37 +25,37 @@ class EmailService {
       
       // Send mail with defined transport object
       const info = await this.transporter.sendMail({
-        from: `"Brevio Team" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
+        from: `"Equipo Brevio" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
         to,
-        subject: 'Your Brevio Creator Contract',
+        subject: 'Tu Contrato de Creador de Brevio',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Welcome to Brevio Creator Program!</h2>
-            <p>Hello ${userName},</p>
-            <p>Congratulations on becoming a Brevio creator! We're excited to have you join our platform.</p>
-            <p>Please find attached your creator contract. Review it carefully and keep it for your records.</p>
-            <p>You can also view your contract online by clicking the button below:</p>
+            <h2>¡Bienvenido al Programa de Creadores de Brevio!</h2>
+            <p>Hola ${userName},</p>
+            <p>¡Felicidades por convertirte en un creador de Brevio! Estamos emocionados de que te unas a nuestra plataforma.</p>
+            <p>Adjunto encontrarás tu contrato de creador. Revísalo cuidadosamente y guárdalo para tus registros.</p>
+            <p>También puedes ver tu contrato en línea haciendo clic en el botón de abajo:</p>
             <div style="text-align: center; margin: 30px 0;">
               <a href="${contractUrl}" style="background-color: #4CAF50; color: white; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold;">
-                View Contract
+                Ver Contrato
               </a>
             </div>
-            <p>If you have any questions about your contract or creator account, please contact our support team.</p>
-            <p>Best regards,<br>The Brevio Team</p>
+            <p>Si tienes alguna pregunta sobre tu contrato o cuenta de creador, por favor contacta a nuestro equipo de soporte.</p>
+            <p>Saludos cordiales,<br>El Equipo de Brevio</p>
           </div>
         `,
         attachments: [
           {
-            filename: 'creator-contract.pdf',
+            filename: 'contrato-creador.pdf',
             path: contractUrl
           }
         ]
       });
       
-      console.log('Creator contract email sent:', info.messageId);
+      console.log('Correo de contrato de creador enviado:', info.messageId);
       return info;
     } catch (error) {
-      console.error('Error sending creator contract email:', error);
+      console.error('Error al enviar correo de contrato de creador:', error);
       throw error;
     }
   }
@@ -225,30 +225,30 @@ class EmailService {
       
       // Send mail with defined transport object
       const info = await this.transporter.sendMail({
-        from: `"Brevio Team" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
+        from: `"Equipo Brevio" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
         to,
-        subject: `Your ${formattedContentType} Has Been Approved`,
+        subject: `Tu ${formattedContentType} Ha Sido Aprobado`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Content Approved</h2>
-            <p>Hello ${userName},</p>
-            <p>Great news! Your ${formattedContentType} titled "${contentTitle}" has been approved and is now published on the Brevio platform.</p>
-            <p>Your content is now live and available to viewers.</p>
+            <h2>Contenido Aprobado</h2>
+            <p>Hola ${userName},</p>
+            <p>¡Buenas noticias! Tu ${formattedContentType} titulado "${contentTitle}" ha sido aprobado y ahora está publicado en la plataforma Brevio.</p>
+            <p>Tu contenido ya está disponible para los espectadores.</p>
             <div style="text-align: center; margin: 30px 0;">
               <a href="${process.env.FRONTEND_URL}/creator/content/${contentId}" style="background-color: #4CAF50; color: white; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold;">
-                View Content
+                Ver Contenido
               </a>
             </div>
-            <p>Thank you for contributing to the Brevio platform!</p>
-            <p>Best regards,<br>The Brevio Team</p>
+            <p>¡Gracias por contribuir a la plataforma Brevio!</p>
+            <p>Saludos cordiales,<br>El Equipo de Brevio</p>
           </div>
         `
       });
       
-      console.log('Content approval email sent:', info.messageId);
+      console.log('Correo de aprobación de contenido enviado:', info.messageId);
       return info;
     } catch (error) {
-      console.error('Error sending content approval email:', error);
+      console.error('Error al enviar correo de aprobación de contenido:', error);
       throw error;
     }
   }
@@ -271,31 +271,31 @@ class EmailService {
       
       // Send mail with defined transport object
       const info = await this.transporter.sendMail({
-        from: `"Brevio Team" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
+        from: `"Equipo Brevio" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
         to,
-        subject: `Your ${formattedContentType} Needs Revision`,
+        subject: `Tu ${formattedContentType} Necesita Revisión`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Content Needs Revision</h2>
-            <p>Hello ${userName},</p>
-            <p>We've reviewed your ${formattedContentType} titled "${contentTitle}" and unfortunately, it doesn't meet our current guidelines.</p>
-            <p><strong>Reason for rejection:</strong> ${rejectionReason}</p>
-            <p>You can edit your content and resubmit it for review. Please address the issues mentioned above before resubmitting.</p>
+            <h2>Contenido Necesita Revisión</h2>
+            <p>Hola ${userName},</p>
+            <p>Hemos revisado tu ${formattedContentType} titulado "${contentTitle}" y desafortunadamente, no cumple con nuestras directrices actuales.</p>
+            <p><strong>Motivo del rechazo:</strong> ${rejectionReason}</p>
+            <p>Puedes editar tu contenido y volver a enviarlo para revisión. Por favor, aborda los problemas mencionados anteriormente antes de volver a enviarlo.</p>
             <div style="text-align: center; margin: 30px 0;">
               <a href="${process.env.FRONTEND_URL}/creator/content/edit/${contentId}" style="background-color: #4CAF50; color: white; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold;">
-                Edit Content
+                Editar Contenido
               </a>
             </div>
-            <p>If you have any questions or need clarification, please contact our support team.</p>
-            <p>Best regards,<br>The Brevio Team</p>
+            <p>Si tienes alguna pregunta o necesitas aclaración, por favor contacta a nuestro equipo de soporte.</p>
+            <p>Saludos cordiales,<br>El Equipo de Brevio</p>
           </div>
         `
       });
       
-      console.log('Content rejection email sent:', info.messageId);
+      console.log('Correo de rechazo de contenido enviado:', info.messageId);
       return info;
     } catch (error) {
-      console.error('Error sending content rejection email:', error);
+      console.error('Error al enviar correo de rechazo de contenido:', error);
       throw error;
     }
   }
@@ -432,25 +432,28 @@ class EmailService {
     try {
       const { to, name, otp, purpose } = options;
       
+      // If this is for email verification, check if user is already registered in Firebase
+      if (purpose === "email_verification" && options.firebaseUid) {
+        console.log(`User already verified in Firebase (${options.firebaseUid}), skipping OTP email`);
+        return { skipped: true, reason: "User already verified in Firebase" };
+      }
+      
       // Get current year for footer
       const currentYear = new Date().getFullYear();
       
-      // Set subject and title based on purpose and language
+      // Set subject and title based on purpose
       let subject, title, actionText, instructionText;
       
-      // Determine if email is for Spanish user (can be enhanced with more robust detection)
-      const isSpanish = to.endsWith('.es') || options.language === 'es';
-      
       if (purpose === "password_reset") {
-        subject = isSpanish ? 'Código de restablecimiento de contraseña' : 'Password Reset Code';
-        title = isSpanish ? 'Restablecimiento de Contraseña' : 'Password Reset';
-        actionText = isSpanish ? 'Aquí tienes tu código para restablecer tu contraseña:' : 'Here is your code to reset your password:';
-        instructionText = isSpanish ? 'Este código es de un solo uso y caduca en unos minutos. Si no solicitaste restablecer tu contraseña, ignora este mensaje o contáctanos.' : 'This code is one-time use and expires in a few minutes. If you did not request a password reset, please ignore this email or contact us.';
+        subject = 'Password Reset Code';
+        title = 'Password Reset';
+        actionText = 'Here is your code to reset your password:';
+        instructionText = 'This code is single-use and expires in a few minutes. If you did not request a password reset, please ignore this message or contact us.';
       } else { // Default to email_verification
-        subject = isSpanish ? 'Código de verificación' : 'OTP Verification Code';
-        title = isSpanish ? 'Verificación de Código' : 'OTP Verification';
-        actionText = isSpanish ? 'Aquí tienes tu código para entrar en Brevio:' : 'Here is your OTP code to access Brevio:';
-        instructionText = isSpanish ? 'Este código es de un solo uso y caduca en unos minutos, así que date prisa. Si no pediste este código, ignora este mensaje o contáctanos.' : 'This code is one-time use and expires in a few minutes, so hurry. If you did not request this code, please ignore this email or contact us.';
+        subject = 'Verification Code';
+        title = 'Code Verification';
+        actionText = 'Here is your code to access Brevio:';
+        instructionText = 'This code is single-use and expires in a few minutes, so please act quickly. If you did not request this code, please ignore this message or contact us.';
       }
       
       // Send mail with defined transport object
@@ -515,7 +518,7 @@ class EmailService {
                 <h2>${title}</h2>
               </div>
               <div class="content">
-                <p>Hola, ${name}</p>
+                <p>Hello, ${name}</p>
                 <p>${actionText}</p>
                 <div class="otp-code">${otp}</div>
                 <p>${instructionText}</p>
@@ -528,7 +531,6 @@ class EmailService {
           </body>
           </html>
         `
-        // Removed logo attachment that was causing 404 error
       });
       
       console.log(`${purpose} OTP email sent:`, info.messageId);

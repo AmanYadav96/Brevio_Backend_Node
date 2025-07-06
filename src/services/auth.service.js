@@ -51,7 +51,8 @@ export class AuthService {
       to: email,
       name: user.name,
       otp: otp.code,
-      purpose: "email_verification"
+      purpose: "email_verification",
+      firebaseUid: user.firebaseUid // Pass the firebaseUid if it exists
     });
 
     // Generate token
@@ -263,7 +264,9 @@ export class AuthService {
           email: userEmail,
           name: userName
         }
-        
+        if(!user.username){
+          user.username = userName
+        }
         // Update Firebase UID if not already set
         if (!user.firebaseUid) {
           user.firebaseUid = firebaseUser.uid
@@ -274,7 +277,8 @@ export class AuthService {
         // Create new user if doesn't exist
         user = await User.create({
           email: userEmail,
-          name: userName,
+          name: userName || displayName,
+          username: userEmail.split('@')[0] + Math.floor(Math.random() * 1000), // Generate a default username
           authProvider: AuthProvider.APPLE,
           isEmailVerified: firebaseUser.emailVerified,
           firebaseUid: firebaseUser.uid,
