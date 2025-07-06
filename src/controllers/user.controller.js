@@ -280,6 +280,12 @@ export const deleteUserAccount = async (req, res) => {
     const userId = req.user._id; // Get the authenticated user's ID
     console.log("User ID for deletion:", userId);
     
+    // Get user data for email
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new AppError("User not found", 404);
+    }
+    
     // Start a session for transaction
     console.log("Attempting to start MongoDB session");
     const session = await mongoose.startSession();
@@ -288,6 +294,19 @@ export const deleteUserAccount = async (req, res) => {
     
     try {
       console.log("Beginning deletion of user-related data");
+      
+      // Send account deleted email
+      try {
+        const emailService = new EmailService();
+        await emailService.sendAccountDeletedEmail({
+          to: user.email,
+          name: user.name
+        });
+        console.log("Account deleted email sent to user");
+      } catch (emailError) {
+        console.error("Error sending account deleted email:", emailError);
+        // Continue with deletion even if email fails
+      }
       
       // Execute deletions sequentially instead of using Promise.all
       // Delete user's saved content

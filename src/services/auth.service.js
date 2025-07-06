@@ -32,27 +32,46 @@ export class AuthService {
       }
     }
 
+    // Check if email exists in Firebase
+    const existsInFirebase = await this.checkIfEmailExistsInFirebase(email);
+    
     // Create new user with default role and INACTIVE status
     const user = await User.create({
       email,
       password,
       name,
       username,
-      role: UserRole.USER, // Always default to USER role
+      role: UserRole.USER,
       authProvider: AuthProvider.LOCAL,
-      status: UserStatus.INACTIVE // Set status to inactive until email verification
+      status: UserStatus.INACTIVE,
+      // If the email exists in Firebase, mark it as verified
+      isEmailVerified: existsInFirebase
     })
 
-    // Generate OTP for email verification
-    const otp = await OTP.generateOTP(email, "email_verification")
+    // Generate OTP for email verification (only if not verified in Firebase)
+    let otp;
+    if (!existsInFirebase) {
+      otp = await OTP.generateOTP(email, "email_verification")
+      
+      // Send OTP email
+      await emailService.sendOtpEmail({
+        to: email,
+        name: user.name,
+        otp: otp.code,
+        purpose: "email_verification"
+      });
+    } else {
+      // If verified in Firebase, update user status to active
+      user.status = UserStatus.ACTIVE;
+      await user.save();
+      
+      console.log(`User already verified in Firebase, skipping OTP email for ${email}`);
+    }
 
-    // Send OTP email
-    await emailService.sendOtpEmail({
+    // Send welcome email
+    await emailService.sendWelcomeEmail({
       to: email,
-      name: user.name,
-      otp: otp.code,
-      purpose: "email_verification",
-      firebaseUid: user.firebaseUid // Pass the firebaseUid if it exists
+      name: user.name
     });
 
     // Generate token
@@ -62,7 +81,8 @@ export class AuthService {
       success: true,
       isAlreadyRegistered: false,
       user, 
-      token 
+      token,
+      isVerifiedInFirebase: existsInFirebase
     }
   }
 
@@ -301,6 +321,19 @@ export class AuthService {
       throw new Error("Apple authentication failed: " + error.message)
     }
   }
+  async checkIfEmailExistsInFirebase(email) {
+    try {
+      const signInMethods = await adminAuth.fetchSignInMethodsForEmail(email);
+      return signInMethods.length > 0;
+    } catch (error) {
+      console.error("Error checking if email exists in Firebase:", error);
+      return false; // Default to false if there's an error
+    }
+  }
 }
 
+
 export default new AuthService()
+
+
+// Add this function to AuthService class

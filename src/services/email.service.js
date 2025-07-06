@@ -311,25 +311,25 @@ class EmailService {
       
       // Send mail with defined transport object
       const info = await this.transporter.sendMail({
-        from: `"Brevio Team" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
+        from: `"Equipo Brevio" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
         to,
-        subject: 'Your Brevio Account Has Been Suspended',
+        subject: 'Tu Cuenta de Brevio Ha Sido Suspendida',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Account Suspended</h2>
-            <p>Hello ${userName},</p>
-            <p>We regret to inform you that your Brevio creator account has been temporarily suspended.</p>
-            <p>This action has been taken due to a violation of our platform's terms of service or community guidelines.</p>
-            <p>If you believe this is a mistake or would like to appeal this decision, please contact our support team.</p>
-            <p>Best regards,<br>The Brevio Team</p>
+            <h2>Cuenta Suspendida</h2>
+            <p>Hola ${userName},</p>
+            <p>Lamentamos informarte que tu cuenta de creador de Brevio ha sido temporalmente suspendida.</p>
+            <p>Esta acción se ha tomado debido a una violación de los términos de servicio o las directrices de nuestra comunidad.</p>
+            <p>Si crees que esto es un error o deseas apelar esta decisión, por favor contacta a nuestro equipo de soporte.</p>
+            <p>Saludos cordiales,<br>El Equipo de Brevio</p>
           </div>
         `
       });
       
-      console.log('Account blocked email sent:', info.messageId);
+      console.log('Correo de cuenta bloqueada enviado:', info.messageId);
       return info;
     } catch (error) {
-      console.error('Error sending account blocked email:', error);
+      console.error('Error al enviar correo de cuenta bloqueada:', error);
       throw error;
     }
   }
@@ -380,29 +380,88 @@ class EmailService {
    */
   async sendAccountDeletedEmail(options) {
     try {
-      const { to, userName } = options;
+      const { to, name } = options;
+      
+      // Get current year for footer
+      const currentYear = new Date().getFullYear();
       
       // Send mail with defined transport object
       const info = await this.transporter.sendMail({
-        from: `"Brevio Team" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
+        from: `"Equipo Brevio" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
         to,
-        subject: 'Your Brevio Account Has Been Deleted',
+        subject: 'Tu cuenta ha sido eliminada',
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Account Deleted</h2>
-            <p>Hello ${userName},</p>
-            <p>We're sorry to see you go. Your Brevio creator account has been permanently deleted along with all associated content and data.</p>
-            <p>If you did not request this action or believe it was done in error, please contact our support team immediately.</p>
-            <p>Thank you for being part of the Brevio community.</p>
-            <p>Best regards,<br>The Brevio Team</p>
-          </div>
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Cuenta eliminada</title>
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 0;
+                color: #333333;
+              }
+              .container {
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px;
+              }
+              .header {
+                background: linear-gradient(135deg, #6e8efb, #a777e3);
+                color: white;
+                padding: 20px;
+                text-align: center;
+                border-radius: 8px 8px 0 0;
+              }
+              .content {
+                background-color: #ffffff;
+                padding: 20px;
+                border-left: 1px solid #dddddd;
+                border-right: 1px solid #dddddd;
+              }
+              .footer {
+                background-color: #f5f5f5;
+                padding: 15px;
+                text-align: center;
+                font-size: 12px;
+                color: #777777;
+                border-radius: 0 0 8px 8px;
+                border: 1px solid #dddddd;
+              }
+              p {
+                line-height: 1.6;
+                margin: 10px 0;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h2>Cuenta eliminada</h2>
+              </div>
+              <div class="content">
+                <p>Hola ${name},</p>
+                <p>Tu cuenta ha sido eliminada con éxito.</p>
+                <p>No vamos a mentir: nos dolió un poco.</p>
+                <p>Si cambias de opinión, aquí estaremos.</p>
+                <p>Mientras tanto, las historias siguen.</p>
+                <p>Tú decides cuándo volver.</p>
+                <p>El equipo de Brevio</p>
+              </div>
+              <div class="footer">
+                &copy; ${currentYear} Brevio. Todos los derechos reservados.
+              </div>
+            </div>
+          </body>
+          </html>
         `
       });
       
-      console.log('Account deleted email sent:', info.messageId);
+      console.log('Correo de cuenta eliminada enviado:', info.messageId);
       return info;
     } catch (error) {
-      console.error('Error sending account deleted email:', error);
+      console.error('Error al enviar correo de cuenta eliminada:', error);
       throw error;
     }
   }
@@ -445,20 +504,20 @@ class EmailService {
       let subject, title, actionText, instructionText;
       
       if (purpose === "password_reset") {
-        subject = 'Password Reset Code';
-        title = 'Password Reset';
-        actionText = 'Here is your code to reset your password:';
-        instructionText = 'This code is single-use and expires in a few minutes. If you did not request a password reset, please ignore this message or contact us.';
+        subject = 'Código para Restablecer Contraseña';
+        title = 'Restablecimiento de Contraseña';
+        actionText = 'Aquí está tu código para restablecer tu contraseña:';
+        instructionText = 'Este código es de un solo uso y expira en unos minutos. Si no solicitaste un restablecimiento de contraseña, por favor ignora este mensaje o contáctanos.';
       } else { // Default to email_verification
-        subject = 'Verification Code';
-        title = 'Code Verification';
-        actionText = 'Here is your code to access Brevio:';
-        instructionText = 'This code is single-use and expires in a few minutes, so please act quickly. If you did not request this code, please ignore this message or contact us.';
+        subject = 'Código de Verificación';
+        title = 'Verificación de Código';
+        actionText = 'Aquí está tu código para acceder a Brevio:';
+        instructionText = 'Este código es de un solo uso y expira en unos minutos, así que por favor actúa rápidamente. Si no solicitaste este código, por favor ignora este mensaje o contáctanos.';
       }
       
       // Send mail with defined transport object
       const info = await this.transporter.sendMail({
-        from: `"Brevio Team" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
+        from: `"Equipo Brevio" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
         to,
         subject: subject,
         html: `
@@ -518,14 +577,14 @@ class EmailService {
                 <h2>${title}</h2>
               </div>
               <div class="content">
-                <p>Hello, ${name}</p>
+                <p>Hola, ${name}</p>
                 <p>${actionText}</p>
                 <div class="otp-code">${otp}</div>
                 <p>${instructionText}</p>
               </div>
               <div class="footer">
-                <p>This email was sent by Brevio</p>
-                <p>&copy;${currentYear} Brevio. All rights reserved.</p>
+                <p>Este correo fue enviado por Brevio</p>
+                <p>&copy;${currentYear} Brevio. Todos los derechos reservados.</p>
               </div>
             </div>
           </body>
@@ -533,10 +592,108 @@ class EmailService {
         `
       });
       
-      console.log(`${purpose} OTP email sent:`, info.messageId);
+      console.log(`Correo de ${purpose === "password_reset" ? "restablecimiento de contraseña" : "verificación"} enviado:`, info.messageId);
       return info;
     } catch (error) {
-      console.error(`Error sending ${options.purpose} OTP email:`, error);
+      console.error(`Error al enviar correo de ${options.purpose === "password_reset" ? "restablecimiento de contraseña" : "verificación"}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send welcome email to newly registered users
+   * @param {Object} options Email options
+   * @param {string} options.to Recipient email
+   * @param {string} options.name Recipient name
+   * @returns {Promise<Object>} Email send result
+   */
+  async sendWelcomeEmail(options) {
+    try {
+      const { to, name } = options;
+      
+      // Get current year for footer
+      const currentYear = new Date().getFullYear();
+      
+      // Send mail with defined transport object
+      const info = await this.transporter.sendMail({
+        from: `"Equipo Brevio" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
+        to,
+        subject: '🎉 ¡Cuenta creada!',
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Bienvenido a Brevio</title>
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 0;
+                background: linear-gradient(#1D1B1C, #282828, #D6EF31);
+              }
+
+              .container {
+                max-width: 600px;
+                margin: 20px auto;
+                background-color: #1D1B1C;
+                border-radius: 8px;
+                overflow: hidden;
+                color: white;
+              }
+
+              .header {
+                background-color: #4C2BEE;
+                color: white;
+                padding: 20px;
+                text-align: center;
+              }
+
+              .content {
+                padding: 20px;
+                background-color: #282828;
+              }
+
+              .footer {
+                text-align: center;
+                padding: 15px;
+                background-color: #1D1B1C;
+                font-size: 13px;
+                color: #CCCCCC;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h2>¡Bienvenido a Brevio!</h2>
+              </div>
+              <div class="content">
+                <p>Ey ${name},</p>
+                <p>Ya tienes cuenta en Brevio.</p>
+                <p>¿Has venido a ver historias? Prepárate para no parar.</p>
+                <p>¿Has venido a contarlas? Mejor aún.</p>
+                <p>🎥 Sube tu corto si te atreves.</p>
+                <p>📲 O desliza y descúbrelos.</p>
+                <p>Aquí no hay comités, ni formularios eternos.</p>
+                <p>Solo creadores, historias… y mucho scroll.</p>
+                <p>Bienvenid@ al nuevo Hollywood (sin filtros ni permisos)</p>
+                <p>❤️ Gracias por sumarte</p>
+                <p>-El equipo de Brevio</p>
+              </div>
+              <div class="footer">
+                <p>Este correo fue enviado por Brevio</p>
+                <p>&copy;${currentYear} Brevio. Todos los derechos reservados.</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `
+      });
+      
+      console.log('Correo de bienvenida enviado:', info.messageId);
+      return info;
+    } catch (error) {
+      console.error('Error al enviar correo de bienvenida:', error);
       throw error;
     }
   }
