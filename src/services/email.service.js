@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import mongoose from 'mongoose';
 
 class EmailService {
   constructor() {
@@ -119,42 +120,120 @@ class EmailService {
     try {
       const { to, userName, contentTitle, contentType, contentId, isAutoApproved } = options;
       
-      // Format content type for display
-      const formattedContentType = contentType
-        .replace(/([A-Z])/g, ' $1')
-        .trim()
-        .toLowerCase()
-        .replace(/^./, str => str.toUpperCase());
+      // Mapeo de tipos de contenido a español
+      const contentTypeInSpanish = {
+        shortFilm: "Cortometraje",
+        series: "Serie",
+        educational: "Contenido Educativo"
+      };
+      
+      // Usar el mapeo en español o formatear si no existe en el mapeo
+      // Normalize contentType to lowercase for case-insensitive matching
+      const normalizedContentType = contentType.toLowerCase();
+      const formattedContentType = 
+        contentTypeInSpanish[contentType] || 
+        contentTypeInSpanish[Object.keys(contentTypeInSpanish).find(key => key.toLowerCase() === normalizedContentType)] ||
+        contentType
+          .replace(/([A-Z])/g, ' $1')
+          .trim()
+          .toLowerCase()
+          .replace(/^./, str => str.toUpperCase());
+      
+      // Add debug log to see what's happening
+      console.log('Content Type:', contentType);
+      console.log('Formatted Content Type:', formattedContentType);
+      
+      // Get current year for footer
+      const currentYear = new Date().getFullYear();
       
       // Send mail with defined transport object
       const info = await this.transporter.sendMail({
-        from: `"Brevio Team" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
+        from: `"Equipo Brevio" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
         to,
-        subject: `Your ${formattedContentType} Has Been ${isAutoApproved ? 'Published' : 'Submitted'}`,
+        subject: `Tu ${formattedContentType} ha sido ${isAutoApproved ? 'publicado' : 'enviado'}`,
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Content ${isAutoApproved ? 'Published' : 'Submitted'} Successfully</h2>
-            <p>Hello ${userName},</p>
-            <p>Your ${formattedContentType} titled "${contentTitle}" has been ${isAutoApproved ? 'published' : 'submitted for review'}.</p>
-            ${isAutoApproved ? 
-              `<p>Your content is now live on the platform and available to viewers.</p>` : 
-              `<p>Our team will review your submission and get back to you shortly. You'll receive another email once the review is complete.</p>`
-            }
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${process.env.FRONTEND_URL}/creator/content/${contentId}" style="background-color: #4CAF50; color: white; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold;">
-                View Content
-              </a>
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Contenido ${isAutoApproved ? 'Publicado' : 'Enviado'}</title>
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 0;
+                color: #333333;
+              }
+              .container {
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px;
+              }
+              .header {
+                background: linear-gradient(90deg, rgb(76, 43, 238) 0%, rgb(43, 25, 136) 100%);
+                color: white;
+                padding: 20px;
+                text-align: center;
+                border-radius: 8px 8px 0 0;
+              }
+              .content {
+                background-color: #ffffff;
+                padding: 20px;
+                border-left: 1px solid #dddddd;
+                border-right: 1px solid #dddddd;
+              }
+              .footer {
+                background-color: #f5f5f5;
+                padding: 15px;
+                text-align: center;
+                font-size: 12px;
+                color: #777777;
+                border-radius: 0 0 8px 8px;
+                border: 1px solid #dddddd;
+              }
+              p {
+                line-height: 1.6;
+                margin: 10px 0;
+              }
+              .button {
+                display: inline-block;
+                background: linear-gradient(135deg, #6e8efb, #a777e3);
+                color: white;
+                padding: 12px 20px;
+                text-decoration: none;
+                border-radius: 4px;
+                font-weight: bold;
+                margin: 20px 0;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h2>Contenido ${isAutoApproved ? 'Publicado' : 'Enviado'} Exitosamente</h2>
+              </div>
+              <div class="content">
+                <p>Hola ${userName},</p>
+                <p>Tu ${formattedContentType.toLowerCase()} titulado "${contentTitle}" ha sido ${isAutoApproved ? 'publicado' : 'enviado para revisión'}.</p>
+                ${isAutoApproved ? 
+                  `<p>Tu contenido ya está disponible en la plataforma y visible para los espectadores.</p>` : 
+                  `<p>Nuestro equipo revisará tu envío y te responderá en breve. Recibirás otro correo electrónico una vez que se complete la revisión.</p>`
+                }
+                <!-- Completely removing the button and div -->
+                <p>¡Gracias por contribuir a la plataforma Brevio!</p>
+              </div>
+              <div class="footer">
+                &copy; ${currentYear} Brevio. Todos los derechos reservados.
+              </div>
             </div>
-            <p>Thank you for contributing to the Brevio platform!</p>
-            <p>Best regards,<br>The Brevio Team</p>
-          </div>
+          </body>
+          </html>
         `
       });
       
-      console.log('Content uploaded email sent:', info.messageId);
+      console.log('Correo de contenido enviado:', info.messageId);
       return info;
     } catch (error) {
-      console.error('Error sending content uploaded email:', error);
+      console.error('Error al enviar correo de contenido:', error);
       throw error;
     }
   }
@@ -188,8 +267,11 @@ class EmailService {
             <p><strong>Title:</strong> ${contentTitle}</p>
             <p><strong>Creator:</strong> ${creatorName}</p>
             <p><strong>Content Type:</strong> ${formattedContentType}</p>
+            <!-- Completely removing the button, styled text, and div -->
+            <p>Please review this submission at your earliest convenience.</p>
+            <p>Best regards,<br>The Brevio Team</p>
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${process.env.FRONTEND_URL}/admin/content/review/${contentId}" style="background-color: #4CAF50; color: white; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold;">
+              <a href="${process.env.FRONTEND_URL}/admin/content/review/${contentId}" style="background-color: #4C2BEE; color: white; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold;">
                 Review Content
               </a>
             </div>
@@ -212,16 +294,27 @@ class EmailService {
    * @param {Object} options Email options
    * @returns {Promise<Object>} Email send result
    */
+  // Add this Spanish mapping to sendContentApprovalEmail
   async sendContentApprovalEmail(options) {
     try {
-      const { to, userName, contentTitle, contentType, contentId } = options;
+      const { to, userName, contentTitle, contentType, contentId, isAutoApproved } = options;
       
-      // Format content type for display
-      const formattedContentType = contentType
+      // Mapeo de tipos de contenido a español
+      const contentTypeInSpanish = {
+        shortFilm: "Cortometraje",
+        series: "Serie",
+        educational: "Contenido Educativo"
+      };
+      
+      // Usar el mapeo en español o formatear si no existe en el mapeo
+      const formattedContentType = contentTypeInSpanish[contentType] || contentType
         .replace(/([A-Z])/g, ' $1')
         .trim()
         .toLowerCase()
         .replace(/^./, str => str.toUpperCase());
+      
+      // Get current year for footer
+      const currentYear = new Date().getFullYear();
       
       // Send mail with defined transport object
       const info = await this.transporter.sendMail({
@@ -234,13 +327,8 @@ class EmailService {
             <p>Hola ${userName},</p>
             <p>¡Buenas noticias! Tu ${formattedContentType} titulado "${contentTitle}" ha sido aprobado y ahora está publicado en la plataforma Brevio.</p>
             <p>Tu contenido ya está disponible para los espectadores.</p>
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${process.env.FRONTEND_URL}/creator/content/${contentId}" style="background-color: #4CAF50; color: white; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold;">
-                Ver Contenido
-              </a>
-            </div>
+            <!-- Completely removing the styled text, empty div, and duplicate text -->
             <p>¡Gracias por contribuir a la plataforma Brevio!</p>
-            <p>Saludos cordiales,<br>El Equipo de Brevio</p>
           </div>
         `
       });
@@ -258,12 +346,20 @@ class EmailService {
    * @param {Object} options Email options
    * @returns {Promise<Object>} Email send result
    */
+  // Add this Spanish mapping to sendContentRejectionEmail
   async sendContentRejectionEmail(options) {
     try {
       const { to, userName, contentTitle, contentType, contentId, rejectionReason } = options;
       
-      // Format content type for display
-      const formattedContentType = contentType
+      // Mapeo de tipos de contenido a español
+      const contentTypeInSpanish = {
+        shortFilm: "Cortometraje",
+        series: "Serie",
+        educational: "Contenido Educativo"
+      };
+      
+      // Usar el mapeo en español o formatear si no existe en el mapeo
+      const formattedContentType = contentTypeInSpanish[contentType] || contentType
         .replace(/([A-Z])/g, ' $1')
         .trim()
         .toLowerCase()
@@ -281,13 +377,8 @@ class EmailService {
             <p>Hemos revisado tu ${formattedContentType} titulado "${contentTitle}" y desafortunadamente, no cumple con nuestras directrices actuales.</p>
             <p><strong>Motivo del rechazo:</strong> ${rejectionReason}</p>
             <p>Puedes editar tu contenido y volver a enviarlo para revisión. Por favor, aborda los problemas mencionados anteriormente antes de volver a enviarlo.</p>
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${process.env.FRONTEND_URL}/creator/content/edit/${contentId}" style="background-color: #4CAF50; color: white; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold;">
-                Editar Contenido
-              </a>
-            </div>
+            <!-- Completely removing the styled text and button -->
             <p>Si tienes alguna pregunta o necesitas aclaración, por favor contacta a nuestro equipo de soporte.</p>
-            <p>Saludos cordiales,<br>El Equipo de Brevio</p>
           </div>
         `
       });
@@ -489,12 +580,26 @@ class EmailService {
    */
   async sendOtpEmail(options) {
     try {
-      const { to, name, otp, purpose } = options;
+      const { to, name, otp, purpose, firebaseUid } = options;
+      
+      // Log more information for debugging
+      console.log(`OTP Email Request - Email: ${to}, Purpose: ${purpose}, Firebase UID: ${firebaseUid || 'Not provided'}`);
       
       // If this is for email verification, check if user is already registered in Firebase
-      if (purpose === "email_verification" && options.firebaseUid) {
-        console.log(`User already verified in Firebase (${options.firebaseUid}), skipping OTP email`);
+      if (purpose === "email_verification" && firebaseUid) {
+        console.log(`User already verified in Firebase (${firebaseUid}), skipping OTP email`);
         return { skipped: true, reason: "User already verified in Firebase" };
+      }
+      
+      // Additional check: Look up user in database to see if they have a firebaseUid
+      if (purpose === "email_verification" && !firebaseUid) {
+        const User = mongoose.model('User');
+        const user = await User.findOne({ email: to });
+        
+        if (user && user.firebaseUid) {
+          console.log(`User found with Firebase UID (${user.firebaseUid}), skipping OTP email`);
+          return { skipped: true, reason: "User already verified in Firebase (found in database)" };
+        }
       }
       
       // Get current year for footer
@@ -642,7 +747,7 @@ class EmailService {
               }
 
               .header {
-                background-color: #4C2BEE;
+                background: linear-gradient(90deg, rgb(76, 43, 238) 0%, rgb(43, 25, 136) 100%);
                 color: white;
                 padding: 20px;
                 text-align: center;

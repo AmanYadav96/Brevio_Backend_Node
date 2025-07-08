@@ -8,6 +8,7 @@ import ChannelSubscription from "../models/channelSubscription.model.js"
 import VideoView from "../models/videoView.model.js"
 import Donation from "../models/donation.model.js"
 import Report from "../models/report.model.js"
+import EmailService from "../services/email.service.js"
 
 // Get all users (for admin)
 export const getAllUsers = async (req, res) => {
@@ -298,13 +299,16 @@ export const deleteUserAccount = async (req, res) => {
       // Send account deleted email
       try {
         const emailService = new EmailService();
-        await emailService.sendAccountDeletedEmail({
+        console.log("Attempting to send account deleted email to:", user.email);
+        const emailResult = await emailService.sendAccountDeletedEmail({
           to: user.email,
           name: user.name
         });
-        console.log("Account deleted email sent to user");
+        console.log("Account deleted email sent to user:", emailResult.messageId);
       } catch (emailError) {
         console.error("Error sending account deleted email:", emailError);
+        // Log more detailed error information
+        console.error("Error details:", JSON.stringify(emailError, null, 2));
         // Continue with deletion even if email fails
       }
       

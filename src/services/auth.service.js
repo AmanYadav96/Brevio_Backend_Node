@@ -8,7 +8,8 @@ import {
   OAuthProvider,
   signInWithCredential 
 } from "firebase/auth"
-import { auth } from "../config/firebase.js"
+// Add this import at the top with your other imports
+import { auth, adminAuth } from "../config/firebase.js"
 
 export class AuthService {
   // Generate JWT token
