@@ -3,6 +3,12 @@ import { OrientationType } from '../models/contentOrientation.model.js'
 import videoProcessorService from '../services/videoProcessor.service.js'
 import User, { UserRole } from '../models/user.model.js'
 import mongoose from 'mongoose'
+// Añadir esta importación para la función transformAllUrls
+import { transformAllUrls } from '../utils/cloudStorage.js'
+// Importación existente para la traducción de estados
+import { translateContentStatus } from '../utils/statusTranslation.js'
+// Importar la función getBlockedUserIds
+import { getBlockedUserIds } from '../controllers/userBlock.controller.js'
 
 // Create new content
 export const createContent = async (req, res) => {
@@ -418,7 +424,6 @@ export const getContentById = async (req, res) => {
     
     const content = await CreatorContent.findById(contentId)
       .populate('creator', 'name username profilePicture')
-      // Removed the genres population since it's not in the schema
     
     if (!content) {
       return res.status(404).json({ 
@@ -429,6 +434,11 @@ export const getContentById = async (req, res) => {
     
     // Transform URLs in content before sending to client
     const transformedContent = transformAllUrls(content);
+    
+    // Traducir el estado a español para la respuesta
+    if (transformedContent.status) {
+      transformedContent.statusInSpanish = translateContentStatus(transformedContent.status);
+    }
     
     return res.json({ 
       success: true, 
@@ -443,13 +453,7 @@ export const getContentById = async (req, res) => {
   }
 }
 
-// Add this import at the top of the file
-import { transformAllUrls } from '../utils/cloudStorage.js';
-
-// Import the utility function at the top of the file
-import { getBlockedUserIds } from './userBlock.controller.js';
-
-// Get all content (with filters)
+// Modificar la función getAllContent para traducir los estados
 export const getAllContent = async (req, res) => {
   try {
     const {

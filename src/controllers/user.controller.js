@@ -1,4 +1,4 @@
-import User from "../models/user.model.js"
+import User, { UserRole, UserStatus } from "../models/user.model.js"
 import { AppError } from "../utils/app-error.js"
 import mongoose from "mongoose"
 import Save from "../models/save.model.js"
@@ -255,24 +255,46 @@ export const deleteUser = async (req, res) => {
 // Get user stats (for admin)
 export const getUserStats = async (req, res) => {
   try {
-    const totalUsers = await User.countDocuments()
-    const creators = await User.countDocuments({ role: 'creator' })
-    const viewers = await User.countDocuments({ role: 'viewer' })
-    const verifiedUsers = await User.countDocuments({ isEmailVerified: true })
+    // Execute queries in parallel for better performance
+    const [totalUsers, premiumUsers, blockedUsers, activeUsers, inactiveUsers, pendingUsers] = await Promise.all([
+      User.countDocuments(), // Total users
+      User.countDocuments({ subscriptionStatus: 'active' }), // Premium users with active subscription
+      User.countDocuments({ status: UserStatus.SUSPENDED }), // Blocked/suspended users
+      User.countDocuments({ status: UserStatus.ACTIVE }), // Active users
+      User.countDocuments({ status: UserStatus.INACTIVE }), // Inactive users
+      User.countDocuments({ status: UserStatus.PENDING }) // Pending users
+    ]);
+
+    // Get user role distribution
+    const regularUsers = await User.countDocuments({ role: UserRole.USER });
+    const creatorUsers = await User.countDocuments({ role: UserRole.CREATOR });
+    const adminUsers = await User.countDocuments({ role: UserRole.ADMIN });
 
     return res.json({
       success: true,
       stats: {
         totalUsers,
-        creators,
-        viewers,
-        verifiedUsers
+        usersByStatus: {
+          active: activeUsers,
+          inactive: inactiveUsers,
+          blocked: blockedUsers,
+          pending: pendingUsers
+        },
+        usersByRole: {
+          regular: regularUsers,
+          creator: creatorUsers,
+          admin: adminUsers
+        },
+        premiumUsers,
+        regularUsers: totalUsers - premiumUsers,
+        verificationRate: totalUsers > 0 ? ((activeUsers / totalUsers) * 100).toFixed(2) + '%' : '0%'
       }
-    })
+    });
   } catch (error) {
-    console.error("Get user stats error:", error)
-    return res.status(500).json({ success: false, message: "Failed to fetch user statistics" })
-  }}
+    console.error("Get user stats error:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch user statistics" });
+  }
+}
 
 // Delete user account (for the user themselves)
 export const deleteUserAccount = async (req, res) => {
