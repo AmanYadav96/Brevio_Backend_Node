@@ -267,9 +267,6 @@ export const getCreatorProfileById = async (req, res) => {
   try {
     const { creatorId } = req.params;
     
-    // Determinar si se debe traducir al español
-    const translateToSpanish = shouldTranslateToSpanish(req);
-    
     // Aplicar traducciones si es necesario
     if (translateToSpanish) {
       // Aplicar traducciones a los datos necesarios
