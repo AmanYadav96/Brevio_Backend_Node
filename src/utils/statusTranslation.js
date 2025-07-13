@@ -1,7 +1,7 @@
 // Mapeo de estados de contenido a español
 export const ContentStatusInSpanish = {
   draft: "borrador",
-  processing: "procesando",
+  processing: "En revisión",
   published: "publicado",
   rejected: "rechazado",
   archived: "archivado"

@@ -144,6 +144,12 @@ export const getCreatorDashboard = async (req, res) => {
  * @param {Object} res - Response
  * @returns {Object} Creator statistics and content data
  */
+// Añadir esta importación al principio del archivo junto con las demás importaciones
+import { shouldTranslateToSpanish } from '../utils/languageHandler.js';
+import { translateContentStatus } from '../utils/statusTranslation.js';
+import { translateAgeRating } from '../utils/ageRatingTranslation.js';
+import { translateContentType } from '../utils/contentTypeTranslation.js';
+
 export const getCreatorStats = async (req, res) => {
   try {
     const user = req.user;
@@ -155,11 +161,34 @@ export const getCreatorStats = async (req, res) => {
     
     const creatorId = user._id;
     
+    // Determinar si se debe traducir al español
+    const translateToSpanish = shouldTranslateToSpanish(req);
+    
     // Get all content created by this creator
     const creatorContent = await CreatorContent.find({ creator: creatorId })
       .select('_id title description contentType status views likes createdAt mediaAssets ageRating genre')
       .populate('genre', 'name nameEs')
       .sort({ createdAt: -1 });
+    
+    // Transformar los datos y aplicar traducciones si es necesario
+    const transformedContent = creatorContent.map(content => {
+      const contentObj = content.toObject();
+      
+      if (translateToSpanish) {
+        // Aplicar traducciones manteniendo las claves originales
+        contentObj.status = translateContentStatus(contentObj.status);
+        contentObj.ageRating = translateAgeRating(contentObj.ageRating);
+        contentObj.contentType = translateContentType(contentObj.contentType);
+        
+        // Usar el nombre en español del género si está disponible
+        if (contentObj.genre && contentObj.genre.nameEs) {
+          contentObj.genre.name = contentObj.genre.nameEs;
+          delete contentObj.genre.nameEs; // Opcional: eliminar el campo nameEs para mantener la estructura limpia
+        }
+      }
+      
+      return contentObj;
+    });
     
     // Get content counts by type and status
     const contentCounts = {
@@ -178,6 +207,27 @@ export const getCreatorStats = async (req, res) => {
       }
     };
     
+    // Traducir las claves de estadísticas si es necesario
+    if (translateToSpanish) {
+      // Traducir los tipos de contenido en las estadísticas
+      const translatedByType = {};
+      Object.keys(contentCounts.byType).forEach(key => {
+        const count = contentCounts.byType[key];
+        const translatedKey = translateContentType(key);
+        translatedByType[key] = count; // Mantener la clave original
+      });
+      contentCounts.byType = translatedByType;
+      
+      // Traducir los estados en las estadísticas
+      const translatedByStatus = {};
+      Object.keys(contentCounts.byStatus).forEach(key => {
+        const count = contentCounts.byStatus[key];
+        const translatedKey = translateContentStatus(key);
+        translatedByStatus[key] = count; // Mantener la clave original
+      });
+      contentCounts.byStatus = translatedByStatus;
+    }
+    
     // Get total likes received on all content
     const contentIds = creatorContent.map(content => content._id);
     const totalLikes = await Like.countDocuments({
@@ -190,18 +240,19 @@ export const getCreatorStats = async (req, res) => {
     
     return res.json({
       success: true,
+      language: translateToSpanish ? 'es' : 'en', // Añadir para depuración
       stats: {
         totalLikes,
         totalViews,
         contentCounts
       },
-      content: creatorContent
+      content: transformedContent
     });
   } catch (error) {
     console.error('Creator stats error:', error);
     return res.status(error.statusCode || 500).json({ 
       success: false, 
-      message: error.message || 'Failed to fetch creator statistics' 
+      message: error.message || 'Failed to fetch creator stats' 
     });
   }
 };
@@ -215,6 +266,15 @@ export const getCreatorStats = async (req, res) => {
 export const getCreatorProfileById = async (req, res) => {
   try {
     const { creatorId } = req.params;
+    
+    // Determinar si se debe traducir al español
+    const translateToSpanish = shouldTranslateToSpanish(req);
+    
+    // Aplicar traducciones si es necesario
+    if (translateToSpanish) {
+      // Aplicar traducciones a los datos necesarios
+      // ...
+    }
     
     // Validate MongoDB ObjectId
     if (!mongoose.Types.ObjectId.isValid(creatorId)) {

@@ -197,8 +197,8 @@ const creatorContentSchema = new mongoose.Schema({
   tags: [String],
   ageRating: {
     type: String,
-    enum: ["G", "PG", "PG-13", "R", "18+", "All Ages"],
-    default: "PG-13"
+    enum: ["7+", "12+", "16+", "18+", "All Ages"],
+    default: "12+"
   },
   status: {
     type: String,

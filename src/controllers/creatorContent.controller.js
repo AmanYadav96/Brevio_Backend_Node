@@ -9,6 +9,8 @@ import { transformAllUrls } from '../utils/cloudStorage.js'
 import { translateContentStatus } from '../utils/statusTranslation.js'
 // Importar la función getBlockedUserIds
 import { getBlockedUserIds } from '../controllers/userBlock.controller.js'
+import { shouldTranslateToSpanish } from '../utils/languageHandler.js';
+
 
 // Create new content
 export const createContent = async (req, res) => {
@@ -871,3 +873,203 @@ export const uploadMediaAssets = async (req, res) => {
     })
   }
 }
+
+// Update content by ID
+export const updateContent = async (req, res) => {
+  try {
+    const { contentId } = req.params;
+    const user = req.user;
+    const updateData = req.body;
+    const uploads = req.uploads || {};
+    
+    // Determine if we should translate to Spanish
+    const translateToSpanish = shouldTranslateToSpanish(req);
+    
+    // Find the content
+    const content = await CreatorContent.findById(contentId);
+    
+    if (!content) {
+      const errorMessage = translateToSpanish ? 
+        "Contenido no encontrado" : 
+        "Content not found";
+      
+      return res.status(404).json({ 
+        success: false, 
+        message: errorMessage
+      });
+    }
+    
+    // Check if user is the creator or an admin
+    if (content.creator.toString() !== user._id.toString() && 
+        user.role !== UserRole.ADMIN) {
+      const errorMessage = translateToSpanish ? 
+        "No tienes permiso para editar este contenido" : 
+        "You don't have permission to edit this content";
+      
+      return res.status(403).json({ 
+        success: false, 
+        message: errorMessage
+      });
+    }
+    
+    // Restricted fields that cannot be directly updated
+    const restrictedFields = [
+      'creator', 
+      'views', 
+      'likes', 
+      'adminApproved',
+      'videoMetadata',
+      'videoUrl' // Prevent updating main video through this endpoint
+    ];
+    
+    // Remove restricted fields from update data
+    restrictedFields.forEach(field => {
+      if (updateData[field]) {
+        delete updateData[field];
+      }
+    });
+    
+    // Special handling for status changes
+    if (updateData.status) {
+      // Only allow certain status transitions
+      if (content.status === 'rejected' && updateData.status !== 'draft') {
+        // If content was rejected, it can only be changed to draft
+        updateData.status = 'draft';
+      }
+      
+      // If changing from rejected to draft, reset rejection reason
+      if (content.status === 'rejected' && updateData.status === 'draft') {
+        updateData.rejectionReason = null;
+      }
+      
+      // Only admins can approve content
+      if (updateData.status === 'published' && user.role !== UserRole.ADMIN) {
+        delete updateData.status;
+      }
+    }
+    
+    // Handle file uploads if present in the request
+    if (Object.keys(uploads).length > 0) {
+      // Update media assets with uploaded files
+      updateData.mediaAssets = {
+        thumbnail: uploads.thumbnail?.url || content.mediaAssets?.thumbnail || '',
+        verticalBanner: uploads.verticalBanner?.url || content.mediaAssets?.verticalBanner || '',
+        horizontalBanner: uploads.horizontalBanner?.url || content.mediaAssets?.horizontalBanner || '',
+        trailer: uploads.trailer?.url || content.mediaAssets?.trailer || '',
+        trailerDuration: uploads.trailer?.duration || content.mediaAssets?.trailerDuration || 0
+      };
+    }
+    
+    // Update the content
+    const updatedContent = await CreatorContent.findByIdAndUpdate(
+      contentId,
+      updateData,
+      { new: true, runValidators: true }
+    ).populate('creator', 'name username profilePicture');
+    
+    // Transform URLs in content before sending to client
+    const transformedContent = transformAllUrls(updatedContent);
+    
+    // Translate status if needed
+    if (translateToSpanish && transformedContent.status) {
+      transformedContent.statusInSpanish = translateContentStatus(transformedContent.status);
+    }
+    
+    const successMessage = translateToSpanish ? 
+      "Contenido actualizado exitosamente" : 
+      "Content updated successfully";
+    
+    return res.json({ 
+      success: true, 
+      message: successMessage,
+      language: translateToSpanish ? 'es' : 'en',
+      content: transformedContent
+    });
+  } catch (error) {
+    console.error("Update content error:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+};
+
+// Delete content by ID
+export const deleteContent = async (req, res) => {
+  try {
+    const { contentId } = req.params;
+    const user = req.user;
+    
+    // Determine if we should translate to Spanish
+    const translateToSpanish = shouldTranslateToSpanish(req);
+    
+    // Find the content
+    const content = await CreatorContent.findById(contentId);
+    
+    if (!content) {
+      const errorMessage = translateToSpanish ? 
+        "Contenido no encontrado" : 
+        "Content not found";
+      
+      return res.status(404).json({ 
+        success: false, 
+        message: errorMessage
+      });
+    }
+    
+    // Check if user is the creator or an admin
+    if (content.creator.toString() !== user._id.toString() && 
+        user.role !== UserRole.ADMIN) {
+      const errorMessage = translateToSpanish ? 
+        "No tienes permiso para eliminar este contenido" : 
+        "You don't have permission to delete this content";
+      
+      return res.status(403).json({ 
+        success: false, 
+        message: errorMessage
+      });
+    }
+    
+    let result;
+    
+    // If content is published, perform a soft delete (archive)
+    if (content.status === 'published') {
+      result = await CreatorContent.findByIdAndUpdate(
+        contentId,
+        { status: 'archived' },
+        { new: true }
+      );
+      
+      const successMessage = translateToSpanish ? 
+        "Contenido archivado exitosamente" : 
+        "Content archived successfully";
+      
+      return res.json({ 
+        success: true, 
+        message: successMessage,
+        language: translateToSpanish ? 'es' : 'en',
+        content: result
+      });
+    } 
+    // For content in other states (draft, processing, rejected), perform hard delete
+    else {
+      result = await CreatorContent.findByIdAndDelete(contentId);
+      
+      const successMessage = translateToSpanish ? 
+        "Contenido eliminado exitosamente" : 
+        "Content deleted successfully";
+      
+      return res.json({ 
+        success: true, 
+        message: successMessage,
+        language: translateToSpanish ? 'es' : 'en'
+      });
+    }
+  } catch (error) {
+    console.error("Delete content error:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+};

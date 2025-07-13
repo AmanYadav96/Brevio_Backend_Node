@@ -12,7 +12,9 @@ import {
   rejectContent,
   getContentById,
   getAllContent,
-  purchaseEducationalContent
+  purchaseEducationalContent,
+  updateContent,
+  deleteContent
 } from "../controllers/creatorContent.controller.js"
 
 const router = express.Router()
@@ -36,5 +38,9 @@ router.get("/", protect, getAllContent)
 
 // Purchase route
 router.post("/:contentId/purchase", protect, purchaseEducationalContent)
+
+// New routes for content editing and deletion
+router.patch("/:contentId", protect, handleUpload('CREATOR_CONTENT'), updateContent)
+router.delete("/:contentId", protect, deleteContent)
 
 export default router
