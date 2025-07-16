@@ -80,15 +80,39 @@ export const restrictTo = (...roles) => {
 export const optionalProtect = async (req, res, next) => {
   try {
     // Get token from header
-    const token = req.headers.authorization?.split(' ')[1];
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader) {
+      return next(); // Continue without authentication
+    }
+    
+    let token;
+    
+    // Handle the case where header might have "Bearer Bearer token"
+    if (authHeader.startsWith("Bearer Bearer ")) {
+      token = authHeader.substring("Bearer Bearer ".length);
+    } else if (authHeader.startsWith("Bearer ")) {
+      token = authHeader.substring("Bearer ".length);
+    } else {
+      token = authHeader;
+    }
     
     if (!token) {
       return next(); // Continue without authentication
     }
     
-    // Verify token and set req.user if valid
-    // (Use your existing token verification logic)
-    // ...
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Check if user exists
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return next(); // Continue without authentication if user not found
+    }
+    
+    // Set user ID and user object in request
+    req.userId = user._id.toString();
+    req.user = user;
     
     next();
   } catch (error) {

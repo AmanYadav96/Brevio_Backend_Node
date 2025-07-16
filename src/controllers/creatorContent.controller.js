@@ -1073,3 +1073,167 @@ export const deleteContent = async (req, res) => {
     });
   }
 };
+
+// Bulk approve content
+export const bulkApproveContent = async (req, res) => {
+  try {
+    const user = req.user
+    const { contentIds } = req.body
+    
+    // Validate input
+    if (!contentIds || !Array.isArray(contentIds) || contentIds.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Please provide an array of content IDs" 
+      })
+    }
+    
+    // Check if user is admin
+    if (user.role !== UserRole.ADMIN) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Only admins can approve content" 
+      })
+    }
+    
+    // Find and update all content items
+    const updateResult = await CreatorContent.updateMany(
+      { _id: { $in: contentIds } },
+      {
+        status: 'published',
+        adminApproved: true
+      }
+    );
+    
+    // Get updated content with creator info for emails
+    const updatedContent = await CreatorContent.find(
+      { _id: { $in: contentIds } }
+    ).populate('creator', 'name email');
+    
+    // Send approval emails to creators
+    const emailPromises = [];
+    const { default: emailService } = await import('../services/email.service.js');
+    
+    for (const content of updatedContent) {
+      try {
+        const emailPromise = emailService.sendContentApprovalEmail({
+          to: content.creator.email,
+          userName: content.creator.name,
+          contentTitle: content.title,
+          contentType: content.contentType,
+          contentId: content._id
+        });
+        
+        emailPromises.push(emailPromise);
+      } catch (emailError) {
+        console.error(`Error preparing approval email for content ${content._id}:`, emailError);
+      }
+    }
+    
+    // Wait for all emails to be sent, but don't block the response
+    Promise.allSettled(emailPromises)
+      .then(results => {
+        const sentCount = results.filter(r => r.status === 'fulfilled').length;
+        console.log(`Sent ${sentCount}/${emailPromises.length} content approval emails`);
+      })
+      .catch(error => {
+        console.error("Error sending bulk approval emails:", error);
+      });
+    
+    return res.json({ 
+      success: true, 
+      message: `${updateResult.modifiedCount} content items approved and published successfully`,
+      modifiedCount: updateResult.modifiedCount,
+      matchedCount: updateResult.matchedCount
+    })
+  } catch (error) {
+    console.error("Bulk approve content error:", error)
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    })
+  }
+}
+
+// Bulk reject content
+export const bulkRejectContent = async (req, res) => {
+  try {
+    const user = req.user
+    const { contentIds, reason } = req.body
+    
+    // Validate input
+    if (!contentIds || !Array.isArray(contentIds) || contentIds.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Please provide an array of content IDs" 
+      })
+    }
+    
+    // Check if user is admin
+    if (user.role !== UserRole.ADMIN) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Only admins can reject content" 
+      })
+    }
+    
+    // Find and update all content items
+    const updateResult = await CreatorContent.updateMany(
+      { _id: { $in: contentIds } },
+      {
+        status: 'rejected',
+        adminApproved: false,
+        rejectionReason: reason || "Content does not meet platform guidelines"
+      }
+    );
+    
+    // Get updated content with creator info for emails
+    const updatedContent = await CreatorContent.find(
+      { _id: { $in: contentIds } }
+    ).populate('creator', 'name email');
+    
+    // Send rejection emails to creators
+    const emailPromises = [];
+    const { default: emailService } = await import('../services/email.service.js');
+    
+    for (const content of updatedContent) {
+      try {
+        const emailPromise = emailService.sendContentRejectionEmail({
+          to: content.creator.email,
+          userName: content.creator.name,
+          contentTitle: content.title,
+          contentType: content.contentType,
+          contentId: content._id,
+          rejectionReason: content.rejectionReason
+        });
+        
+        emailPromises.push(emailPromise);
+      } catch (emailError) {
+        console.error(`Error preparing rejection email for content ${content._id}:`, emailError);
+      }
+    }
+    
+    // Wait for all emails to be sent, but don't block the response
+    Promise.allSettled(emailPromises)
+      .then(results => {
+        const sentCount = results.filter(r => r.status === 'fulfilled').length;
+        console.log(`Sent ${sentCount}/${emailPromises.length} content rejection emails`);
+      })
+      .catch(error => {
+        console.error("Error sending bulk rejection emails:", error);
+      });
+    
+    return res.json({ 
+      success: true, 
+      message: `${updateResult.modifiedCount} content items rejected successfully`,
+      modifiedCount: updateResult.modifiedCount,
+      matchedCount: updateResult.matchedCount
+    })
+  } catch (error) {
+    console.error("Bulk reject content error:", error)
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    })
+  }
+}

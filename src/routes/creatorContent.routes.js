@@ -10,6 +10,8 @@ import {
   addLesson,
   approveContent,
   rejectContent,
+  bulkApproveContent,  // Add this
+  bulkRejectContent,   // Add this
   getContentById,
   getAllContent,
   purchaseEducationalContent,
@@ -42,5 +44,9 @@ router.post("/:contentId/purchase", protect, purchaseEducationalContent)
 // New routes for content editing and deletion
 router.patch("/:contentId", protect, handleUpload('CREATOR_CONTENT'), updateContent)
 router.delete("/:contentId", protect, deleteContent)
+
+// Bulk admin routes
+router.post("/bulk/approve", protect, restrictTo(UserRole.ADMIN), bulkApproveContent)
+router.post("/bulk/reject", protect, restrictTo(UserRole.ADMIN), bulkRejectContent)
 
 export default router

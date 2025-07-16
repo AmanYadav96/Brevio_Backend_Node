@@ -65,6 +65,7 @@ export const toggleLike = async (req, res) => {
 }
 
 // Get likes for content
+// Get likes for content
 export const getLikes = async (req, res) => {
   try {
     const { contentType, contentId, userId } = req.query
@@ -82,7 +83,9 @@ export const getLikes = async (req, res) => {
     
     // Check if the specified user has liked this content
     let userLiked = false
-    if (userId) {
+    
+    // Only check if userId is valid and not 'undefined'
+    if (userId && userId !== 'undefined') {
       const userLike = await Like.findOne({
         user: userId,
         contentType,

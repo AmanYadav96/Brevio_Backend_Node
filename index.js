@@ -52,8 +52,12 @@ import UserBlock from './src/routes/userBlock.routes.js';
 import videoViewRoutes from "./src/routes/videoView.routes.js"
 import { errorHandler } from "./src/middlewares/error.middleware.js";
 
+// Add this after creating the Express app
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Add trust proxy configuration to get correct IP addresses behind proxies
+app.set('trust proxy', true);
 
 // Database connection with retry mechanism
 const connectWithRetry = async () => {

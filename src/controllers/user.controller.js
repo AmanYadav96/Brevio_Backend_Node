@@ -9,6 +9,8 @@ import VideoView from "../models/videoView.model.js"
 import Donation from "../models/donation.model.js"
 import Report from "../models/report.model.js"
 import EmailService from "../services/email.service.js"
+// Add this import at the top of the file
+import { isIpFromSpain } from "../utils/geolocation.js"
 
 // Get all users (for admin)
 export const getAllUsers = async (req, res) => {
@@ -104,6 +106,35 @@ export const updateUserProfile = async (req, res) => {
     
     // Get updates from request body
     let updates = req.body;
+    
+    // In updateUserProfile function where you check geolocation
+    console.log('All request headers:', req.headers);
+    // Check if role is being changed to CREATOR and verify geolocation
+    if (updates.role === UserRole.CREATOR && currentUser.role !== UserRole.CREATOR) {
+    // Get IP address from request - try multiple sources with more detailed logging
+    const forwardedIp = req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : undefined;
+    const realIp = req.headers['x-real-ip'];
+    const socketIp = req.connection.remoteAddress;
+    const expressIp = req.ip;
+    
+    // Use the first available IP in this priority order
+    const ip = forwardedIp || realIp || socketIp || expressIp;
+    
+    console.log('Original IP headers:', {
+      'x-forwarded-for': req.headers['x-forwarded-for'],
+      'x-real-ip': req.headers['x-real-ip'],
+      'remoteAddress': req.connection.remoteAddress,
+      'req.ip': req.ip
+    });
+    
+    console.log("User IP for geolocation check:", ip);
+    
+    // Check if IP is from Spain
+    if (!isIpFromSpain(ip)) {
+      throw new AppError("Creator registration is only available in Spain", 403);
+    }
+    console.log("Geolocation check passed: IP is from Spain");
+    }
     
     // Handle file uploads if present
     if (req.uploads) {

@@ -13,6 +13,8 @@ import { createStripeCustomer } from "../services/stripe.service.js";
 import { AppError } from "../utils/app-error.js";
 import authService from "../services/auth.service.js";
 import emailService from "../services/email.service.js";
+// Add this import at the top of the file
+import { isIpFromSpain } from '../utils/geolocation.js';
 
 export const googleLogin = async (req, res) => {
   try {
@@ -142,10 +144,22 @@ export const facebookLogin = async (req, res) => {
   }
 }
 
+// Then modify the becomeCreator function
 export const becomeCreator = async (req, res) => {
   try {
     const userId = req.user._id
     const { username } = req.body
+
+    // Get client IP address
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    
+    // Check if user is from Spain
+    if (!isIpFromSpain(ip)) {
+      return res.status(403).json({
+        success: false,
+        message: "Creator registration is only available for users from Spain"
+      });
+    }
 
     // Validate username
     if (!username) {
@@ -249,8 +263,20 @@ export const login = async (req, res) => {
 }
 
 // Google authentication
+// Modify the googleAuthCreator function
 export const googleAuthCreator = async (req, res) => {
   try {
+    // Get client IP address
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    
+    // Check if user is from Spain
+    if (!isIpFromSpain(ip)) {
+      return res.status(403).json({
+        success: false,
+        message: "Creator registration is only available for users from Spain"
+      });
+    }
+    
     const { idToken, username } = req.body
     
     if (!idToken) {
