@@ -64,7 +64,7 @@
  *           description: Age rating
  *         status:
  *           type: string
- *           enum: [draft, processing, published, rejected, archived]
+ *           enum: [draft, processing, published, rejected, reviewed, archived]
  *           description: Content status
  *         isActive:
  *           type: boolean
@@ -629,6 +629,165 @@
  *         description: Unauthorized
  *       404:
  *         description: Content not found
+ *
+ * /api/creator-content/{contentId}/review:
+ *   patch:
+ *     summary: Mark content as reviewed (admin only)
+ *     tags: [Creator Content]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Content ID
+ *     responses:
+ *       200:
+ *         description: Content marked as reviewed successfully
+ *       403:
+ *         description: Unauthorized
+ *       404:
+ *         description: Content not found
+ *
+ * /api/creator-content/bulk/approve:
+ *   post:
+ *     summary: Bulk approve content (admin only)
+ *     tags: [Creator Content]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - contentIds
+ *             properties:
+ *               contentIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Array of content IDs to approve
+ *     responses:
+ *       200:
+ *         description: Content items approved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Content items approved successfully
+ *                 updatedCount:
+ *                   type: integer
+ *                   example: 5
+ *                 emailsSent:
+ *                   type: integer
+ *                   example: 5
+ *       400:
+ *         description: Invalid input
+ *       403:
+ *         description: Unauthorized
+ *
+ * /api/creator-content/bulk/reject:
+ *   post:
+ *     summary: Bulk reject content (admin only)
+ *     tags: [Creator Content]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - contentIds
+ *             properties:
+ *               contentIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Array of content IDs to reject
+ *               reason:
+ *                 type: string
+ *                 description: Rejection reason
+ *     responses:
+ *       200:
+ *         description: Content items rejected successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Content items rejected successfully
+ *                 updatedCount:
+ *                   type: integer
+ *                   example: 5
+ *                 emailsSent:
+ *                   type: integer
+ *                   example: 5
+ *       400:
+ *         description: Invalid input
+ *       403:
+ *         description: Unauthorized
+ *
+ * /api/creator-content/bulk/review:
+ *   post:
+ *     summary: Bulk mark content as reviewed (admin only)
+ *     tags: [Creator Content]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - contentIds
+ *             properties:
+ *               contentIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Array of content IDs to mark as reviewed
+ *     responses:
+ *       200:
+ *         description: Content items marked as reviewed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Content items marked as reviewed successfully
+ *                 updatedCount:
+ *                   type: integer
+ *                   example: 5
+ *                 emailsSent:
+ *                   type: integer
+ *                   example: 5
+ *       400:
+ *         description: Invalid input
+ *       403:
+ *         description: Unauthorized
  *
  * /api/creator-content/{contentId}/purchase:
  *   post:

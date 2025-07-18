@@ -16,7 +16,9 @@ import {
   getAllContent,
   purchaseEducationalContent,
   updateContent,
-  deleteContent
+  deleteContent,
+  markContentAsReviewed,
+  bulkMarkContentAsReviewed
 } from "../controllers/creatorContent.controller.js"
 
 const router = express.Router()
@@ -33,6 +35,9 @@ router.post("/:contentId/lessons", protect, handleUpload('lesson'), addLesson)
 // Admin routes
 router.patch("/:contentId/approve", protect, restrictTo(UserRole.ADMIN), approveContent)
 router.patch("/:contentId/reject", protect, restrictTo(UserRole.ADMIN), rejectContent)
+// Add these new routes
+router.patch("/:contentId/review", protect, restrictTo(UserRole.ADMIN), markContentAsReviewed)
+router.post("/bulk/review", protect, restrictTo(UserRole.ADMIN), bulkMarkContentAsReviewed)
 
 // Content retrieval routes
 router.get("/:contentId", getContentById)

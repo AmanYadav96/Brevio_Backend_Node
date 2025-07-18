@@ -451,9 +451,13 @@ export const getContentForReview = async (req, res) => {
       .populate('genre', 'name nameEs')
       .lean();
     
-    // Separate content into pending and reviewed (approved/rejected)
+    // Separate content into pending, reviewed, and approved/rejected
     const pendingContent = allContent.filter(item => item.status === 'processing');
-    const reviewedContent = allContent.filter(item => item.status === 'published' || item.status === 'rejected');
+    const reviewedContent = allContent.filter(item => item.status === 'reviewed');
+    const finalizedContent = allContent.filter(item => 
+      item.status === 'published' || 
+      item.status === 'rejected'
+    );
     
     // Sort each group by the specified sort options
     const sortFn = (a, b) => {
@@ -470,8 +474,8 @@ export const getContentForReview = async (req, res) => {
     pendingContent.sort(sortFn);
     reviewedContent.sort(sortFn);
     
-    // Combine the arrays with pending content first, followed by reviewed content
-    const sortedContent = [...pendingContent, ...reviewedContent];
+    // Combine the arrays with pending content first, followed by reviewed content, then finalized content
+    const sortedContent = [...pendingContent, ...reviewedContent, ...finalizedContent];
     
     // Transform URLs in content before sending to client
     const transformedContent = transformAllUrls(sortedContent);

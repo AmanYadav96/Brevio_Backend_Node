@@ -4,7 +4,8 @@ export const ContentStatusInSpanish = {
   processing: "En revisión",
   published: "publicado",
   rejected: "rechazado",
-  archived: "archivado"
+  archived: "archivado",
+  reviewed: "revisado"
 };
 
 /**

@@ -346,7 +346,11 @@ class EmailService {
    * @param {Object} options Email options
    * @returns {Promise<Object>} Email send result
    */
-  // Add this Spanish mapping to sendContentRejectionEmail
+  /**
+   * Send content rejection email to creator
+   * @param {Object} options Email options
+   * @returns {Promise<Object>} Email send result
+   */
   async sendContentRejectionEmail(options) {
     try {
       const { to, userName, contentTitle, contentType, contentId, rejectionReason } = options;
@@ -366,19 +370,20 @@ class EmailService {
         .replace(/^./, str => str.toUpperCase());
       
       // Send mail with defined transport object
-      const info = await this.transporter.sendMail({
+     const info = await this.transporter.sendMail({
         from: `"Equipo Brevio" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
         to,
-        subject: `Tu ${formattedContentType} Necesita Revisión`,
+        subject: `Tu ${formattedContentType} Ha Sido Rechazado`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Contenido Necesita Revisión</h2>
+            <h2>Contenido No Aprobado</h2>
             <p>Hola ${userName},</p>
-            <p>Hemos revisado tu ${formattedContentType} titulado "${contentTitle}" y desafortunadamente, no cumple con nuestras directrices actuales.</p>
+            <p>Hemos revisado tu ${formattedContentType} titulado "${contentTitle}" y lamentamos informarte que no cumple con nuestras directrices de contenido.</p>
             <p><strong>Motivo del rechazo:</strong> ${rejectionReason}</p>
-            <p>Puedes editar tu contenido y volver a enviarlo para revisión. Por favor, aborda los problemas mencionados anteriormente antes de volver a enviarlo.</p>
-            <!-- Completely removing the styled text and button -->
+            <p>Después de una evaluación cuidadosa, hemos determinado que este contenido no puede ser aprobado para su publicación en nuestra plataforma y no podrá ser reconsiderado para aprobación en el futuro.</p>
+            <p>Agradecemos tu comprensión y te invitamos a crear nuevo contenido que se alinee con nuestras directrices.</p>
             <p>Si tienes alguna pregunta o necesitas aclaración, por favor contacta a nuestro equipo de soporte.</p>
+            <p>Saludos,<br>El Equipo de Brevio</p>
           </div>
         `
       });
@@ -390,6 +395,61 @@ class EmailService {
       throw error;
     }
   }
+
+  /**
+   * Send final content rejection email to creator (no possibility of approval)
+   * @param {Object} options Email options
+   * @returns {Promise<Object>} Email send result
+   */
+  async sendContentFinalRejectionEmail(options) {
+    try {
+      const { to, userName, contentTitle, contentType, contentId, rejectionReason } = options;
+      
+      // Mapeo de tipos de contenido a español
+      const contentTypeInSpanish = {
+        shortFilm: "Cortometraje",
+        series: "Serie",
+        educational: "Contenido Educativo"
+      };
+      
+      // Usar el mapeo en español o formatear si no existe en el mapeo
+      const formattedContentType = contentTypeInSpanish[contentType] || contentType
+        .replace(/([A-Z])/g, ' $1')
+        .trim()
+        .toLowerCase()
+        .replace(/^./, str => str.toUpperCase());
+      
+      // Send mail with defined transport object
+    const info = await this.transporter.sendMail({
+      from: `"Equipo Brevio" <${process.env.EMAIL_FROM || 'noreply@brevio.com'}>`,
+      to,
+      subject: `Contenido Necesita Revisión`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <p>Hola ${userName},</p>
+          
+          <p>Hemos revisado tu ${formattedContentType} titulado "${contentTitle}" y desafortunadamente, no cumple con nuestras directrices actuales.</p>
+          
+          <p><strong>Motivo del rechazo:</strong></p>
+          <p>${rejectionReason || 'No especificado'}</p>
+          
+          <p>Puedes editar tu contenido y volver a enviarlo para revisión. Por favor, aborda los problemas mencionados anteriormente antes de volver a enviarlo.</p>
+          
+          <p>Si tienes alguna pregunta o necesitas aclaración, por favor contacta a nuestro equipo de soporte.</p>
+          
+          <p>Saludos,<br>El equipo de Brevio</p>
+        </div>
+      `
+    });
+    
+    console.log('Correo de rechazo final de contenido enviado:', info.messageId);
+    return info;
+  } catch (error) {
+    console.error('Error al enviar correo de rechazo final de contenido:', error);
+    throw error;
+  }
+}
+
 
   /**
    * Send account blocked email

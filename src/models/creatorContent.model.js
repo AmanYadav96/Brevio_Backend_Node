@@ -202,7 +202,7 @@ const creatorContentSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["draft", "processing", "published", "rejected", "archived"],
+    enum: ["draft", "processing", "published", "rejected", "archived", "reviewed"],
     default: "draft"
   },
   isActive: {

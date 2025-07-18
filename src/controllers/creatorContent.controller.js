@@ -1237,3 +1237,158 @@ export const bulkRejectContent = async (req, res) => {
     })
   }
 }
+
+// Mark content as reviewed
+export const markContentAsReviewed = async (req, res) => {
+  try {
+    const user = req.user
+    const { contentId } = req.params
+    const { reason } = req.body  // Get reason from request body
+    
+    // Check if user is admin
+    if (user.role !== UserRole.ADMIN) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Only admins can mark content as reviewed" 
+      })
+    }
+    
+    // Find and update content
+    const content = await CreatorContent.findByIdAndUpdate(
+      contentId,
+      {
+        status: 'reviewed',
+        adminApproved: false,
+        rejectionReason: reason || "Content does not meet platform guidelines"  // Store the reason
+      },
+      { new: true }
+    ).populate('creator', 'name email');
+    
+    if (!content) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Content not found" 
+      })
+    }
+    
+    // Send rejection email to creator with the custom reason
+    try {
+      const { default: emailService } = await import('../services/email.service.js');
+      
+      await emailService.sendContentFinalRejectionEmail({
+        to: content.creator.email,
+        userName: content.creator.name,
+        contentTitle: content.title,
+        contentType: content.contentType,
+        contentId: content._id,
+        rejectionReason: content.rejectionReason || "No cumple con nuestras directrices de contenido."
+      });
+      
+      console.log(`Correo de rechazo definitivo enviado a ${content.creator.email}`);
+    } catch (emailError) {
+      // Log error but don't fail the request
+      console.error("Error al enviar correo de rechazo definitivo:", emailError);
+    }
+    
+    return res.json({ 
+      success: true, 
+      content,
+      message: "Content marked as reviewed successfully"
+    })
+  } catch (error) {
+    console.error("Mark content as reviewed error:", error)
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    })
+  }
+}
+
+// Bulk mark content as reviewed
+export const bulkMarkContentAsReviewed = async (req, res) => {
+  try {
+    const user = req.user
+    const { contentIds, reason } = req.body  // Get reason from request body
+    
+    // Validate input
+    if (!contentIds || !Array.isArray(contentIds) || contentIds.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Please provide an array of content IDs" 
+      })
+    }
+    
+    // Check if user is admin
+    if (user.role !== UserRole.ADMIN) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Only admins can mark content as reviewed" 
+      })
+    }
+    
+    // Store the rejection reason
+    const rejectionReason = reason || "Content does not meet platform guidelines";
+    
+    // Find and update all content items
+    const updateResult = await CreatorContent.updateMany(
+      { _id: { $in: contentIds } },
+      {
+        status: 'reviewed',
+        adminApproved: false,
+        rejectionReason: rejectionReason  // Store the reason
+      }
+    );
+    
+    // Get updated content with creator info for emails
+    const updatedContent = await CreatorContent.find(
+      { _id: { $in: contentIds } }
+    ).populate('creator', 'name email');
+    
+    // Send rejection emails to creators
+    const emailPromises = [];
+    const { default: emailService } = await import('../services/email.service.js');
+    
+    for (const content of updatedContent) {
+      try {
+        // Only send email if creator and creator.email exist
+        if (content.creator && content.creator.email) {
+          const emailPromise = emailService.sendContentRejectionEmail({
+            to: content.creator.email,
+            userName: content.creator.name,
+            contentTitle: content.title,
+            contentType: content.contentType,
+            contentId: content._id,
+            rejectionReason: rejectionReason  // Use the custom reason
+          });
+          
+          emailPromises.push(emailPromise);
+        }
+      } catch (emailError) {
+        console.error(`Error preparing review email for content ${content._id}:`, emailError);
+      }
+    }
+    
+    // Wait for all emails to be sent, but don't block the response
+    Promise.allSettled(emailPromises)
+      .then(results => {
+        const sentCount = results.filter(r => r.status === 'fulfilled').length;
+        console.log(`Sent ${sentCount}/${emailPromises.length} content review emails`);
+      })
+      .catch(error => {
+        console.error("Error sending bulk review emails:", error);
+      });
+    
+    return res.json({ 
+      success: true, 
+      message: `${updateResult.modifiedCount} content items marked as reviewed successfully`,
+      modifiedCount: updateResult.modifiedCount,
+      matchedCount: updateResult.matchedCount
+    })
+  } catch (error) {
+    console.error("Bulk mark content as reviewed error:", error)
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    })
+  }
+}
