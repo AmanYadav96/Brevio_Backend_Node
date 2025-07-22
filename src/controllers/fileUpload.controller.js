@@ -176,3 +176,36 @@ export const getUploadProgress = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// Get file uploads by content ID
+export const getFileUploadsByContentId = async (req, res) => {
+  try {
+    const { contentId } = req.params;
+    const userId = req.user._id;
+    
+    // Validate contentId
+    if (!mongoose.Types.ObjectId.isValid(contentId)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid content ID' 
+      });
+    }
+    
+    // Find file uploads for the specific content
+    const fileUploads = await FileUpload.find({ 
+      documentId: contentId,
+      userId: userId // Ensure user can only see their own uploads
+    }).sort({ createdAt: -1 });
+    
+    return res.json({
+      success: true,
+      uploads: fileUploads,
+      count: fileUploads.length
+    });
+  } catch (error) {
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+};

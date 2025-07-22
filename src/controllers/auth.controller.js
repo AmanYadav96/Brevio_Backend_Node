@@ -217,6 +217,21 @@ export const becomeCreator = async (req, res) => {
 // Register with email and password
 export const register = async (req, res) => {
   try {
+    // Console logs to print all incoming request data
+    console.log('=== REGISTER USER REQUEST DATA ===');
+    console.log('Request Body:', JSON.stringify(req.body, null, 2));
+    console.log('Request Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('Request Query Parameters:', JSON.stringify(req.query, null, 2));
+    console.log('Request Params:', JSON.stringify(req.params, null, 2));
+    console.log('Request Method:', req.method);
+    console.log('Request URL:', req.url);
+    console.log('Request IP:', req.ip || req.connection.remoteAddress);
+    console.log('User Agent:', req.get('User-Agent'));
+    console.log('Content-Type:', req.get('Content-Type'));
+    console.log('Request Files (if any):', req.files);
+    console.log('Request Cookies:', req.cookies);
+    console.log('=== END REQUEST DATA ===');
+    
     const body = req.body
     const result = await authService.registerWithEmail(body)
     
@@ -235,6 +250,12 @@ export const register = async (req, res) => {
       user: result.user
     })
   } catch (error) {
+    console.log('=== REGISTER ERROR ===');
+    console.log('Error:', error);
+    console.log('Error Message:', error.message);
+    console.log('Error Stack:', error.stack);
+    console.log('=== END ERROR ===');
+    
     return res.status(400).json({
       success: false,
       isAlreadyRegistered: false,

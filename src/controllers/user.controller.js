@@ -351,9 +351,9 @@ export const deleteUserAccount = async (req, res) => {
       
       // Send account deleted email
       try {
-        const emailService = new EmailService();
+        // Fix: Use EmailService directly instead of new EmailService()
         console.log("Attempting to send account deleted email to:", user.email);
-        const emailResult = await emailService.sendAccountDeletedEmail({
+        const emailResult = await EmailService.sendAccountDeletedEmail({
           to: user.email,
           name: user.name
         });

@@ -426,6 +426,7 @@ export const getContentById = async (req, res) => {
     
     const content = await CreatorContent.findById(contentId)
       .populate('creator', 'name username profilePicture')
+      .populate('genre', 'name nameEs')
     
     if (!content) {
       return res.status(404).json({ 
@@ -468,7 +469,8 @@ export const getAllContent = async (req, res) => {
       genre,
       search,
       sort = 'createdAt',
-      order = 'desc'
+      order = 'desc',
+      ignoreLimit = true // Add this parameter to bypass pagination
     } = req.query;
     
     const query = {};
@@ -511,23 +513,26 @@ export const getAllContent = async (req, res) => {
       }
     }
     
-    // Calculate pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    
     // Determine sort order
     const sortOptions = {};
     sortOptions[sort] = order === 'asc' ? 1 : -1;
     
-    // Use lean() to get plain JavaScript objects instead of Mongoose documents
-    // This is much faster and uses less memory
+    // Build the query
+    let contentQuery = CreatorContent.find(query)
+      .populate('creator', 'name username profilePicture')
+      .populate('genre', 'name nameEs')
+      .sort(sortOptions)
+      .lean();
+    
+    // Apply pagination only if ignoreLimit is false
+    if (!ignoreLimit && ignoreLimit !== 'true') {
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      contentQuery = contentQuery.skip(skip).limit(parseInt(limit));
+    }
+    
+    // Execute queries
     const [content, total] = await Promise.all([
-      CreatorContent.find(query)
-        .populate('creator', 'name username profilePicture')
-        .populate('genre', 'name nameEs')
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(parseInt(limit))
-        .lean(),  // This bypasses Mongoose's ObjectId-to-string conversion
+      contentQuery,
       CreatorContent.countDocuments(query)
     ]);
     
@@ -537,16 +542,25 @@ export const getAllContent = async (req, res) => {
     // Shuffle the content array if needed
     const shuffledContent = [...transformedContent].sort(() => Math.random() - 0.5);
     
-    return res.json({
+    // Build response based on whether pagination is ignored
+    const response = {
       success: true,
-      content: shuffledContent,
-      pagination: {
+      content: shuffledContent
+    };
+    
+    // Add pagination info only if limits are not ignored
+    if (!ignoreLimit && ignoreLimit !== 'true') {
+      response.pagination = {
         total,
         pages: Math.ceil(total / parseInt(limit)),
         page: parseInt(page),
         limit: parseInt(limit)
-      }
-    });
+      };
+    } else {
+      response.total = total;
+    }
+    
+    return res.json(response);
   } catch (error) {
     console.error('Get all content error:', error);
     return res.status(error.statusCode || 500).json({

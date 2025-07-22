@@ -21,7 +21,7 @@ export class AuthService {
 
   // Register with email and password
   async registerWithEmail(userData) {
-    const { email, password, name, username } = userData
+    const { email, password, name, username, isSocialLogin } = userData
 
     // Check if user already exists
     const existingUser = await User.findOne({ email })
@@ -49,9 +49,9 @@ export class AuthService {
       isEmailVerified: existsInFirebase
     })
 
-    // Generate OTP for email verification (only if not verified in Firebase)
+    // Generate OTP for email verification (only if not verified in Firebase AND not social login)
     let otp;
-    if (!existsInFirebase) {
+    if (!isSocialLogin) {
       otp = await OTP.generateOTP(email, "email_verification")
       
       // Send OTP email
@@ -62,11 +62,15 @@ export class AuthService {
         purpose: "email_verification"
       });
     } else {
-      // If verified in Firebase, update user status to active
+      // If verified in Firebase or social login, update user status to active
       user.status = UserStatus.ACTIVE;
       await user.save();
       
-      console.log(`User already verified in Firebase, skipping OTP email for ${email}`);
+      if (isSocialLogin) {
+        console.log(`Social login detected, skipping OTP email for ${email}`);
+      } else {
+        console.log(`User already verified in Firebase, skipping OTP email for ${email}`);
+      }
     }
 
     // Send welcome email
