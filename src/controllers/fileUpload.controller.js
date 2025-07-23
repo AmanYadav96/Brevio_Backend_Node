@@ -178,6 +178,134 @@ export const getUploadProgress = async (req, res) => {
 };
 
 // Get file uploads by content ID
+export const getUploadProgressByContentId = async (req, res) => {
+  try {
+    const { contentId } = req.params;
+    const userId = req.user._id;
+    
+    // Validate contentId
+    if (!mongoose.Types.ObjectId.isValid(contentId)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid content ID' 
+      });
+    }
+    
+    // Find file uploads for the specific content using contentId field
+    const fileUploads = await FileUpload.find({ 
+      contentId: contentId,
+      userId: userId
+    }).sort({ createdAt: -1 });
+    
+    if (fileUploads.length === 0) {
+      return res.json({
+        success: true,
+        uploads: [],
+        count: 0,
+        overallProgress: {
+          totalFiles: 0,
+          completedFiles: 0,
+          failedFiles: 0,
+          uploadingFiles: 0,
+          compressingFiles: 0,
+          overallPercentage: 0,
+          totalSize: 0,
+          uploadedSize: 0
+        }
+      });
+    }
+    
+    // Calculate overall progress statistics
+    let totalFiles = fileUploads.length;
+    let completedFiles = 0;
+    let failedFiles = 0;
+    let uploadingFiles = 0;
+    let compressingFiles = 0;
+    let totalSize = 0;
+    let uploadedSize = 0;
+    
+    // Process each upload and calculate detailed progress
+    const uploadsWithProgress = fileUploads.map(upload => {
+      const currentTime = Date.now();
+      const createdTime = new Date(upload.createdAt).getTime();
+      const updatedTime = new Date(upload.updatedAt).getTime();
+      
+      // Calculate upload speed and time remaining
+      let uploadSpeed = 0;
+      let estimatedTimeRemaining = 0;
+      let uploadedBytes = Math.round((upload.progress / 100) * upload.fileSize);
+      
+      // Update counters
+      totalSize += upload.fileSize;
+      uploadedSize += uploadedBytes;
+      
+      if (upload.status === 'completed' || upload.status === 'complete') {
+        completedFiles++;
+        uploadedBytes = upload.fileSize;
+      } else if (upload.status === 'failed' || upload.status === 'error') {
+        failedFiles++;
+      } else if (upload.status === 'compressing') {
+        compressingFiles++;
+      } else if (upload.status === 'uploading' || upload.status === 'chunking') {
+        uploadingFiles++;
+        
+        // Calculate speed and ETA for active uploads
+        const timeElapsed = (updatedTime - createdTime) / 1000;
+        if (timeElapsed > 0 && upload.progress > 0) {
+          uploadSpeed = uploadedBytes / timeElapsed;
+          const remainingBytes = upload.fileSize - uploadedBytes;
+          if (uploadSpeed > 0) {
+            estimatedTimeRemaining = Math.round(remainingBytes / uploadSpeed);
+          }
+        }
+      }
+      
+      return {
+        _id: upload._id,
+        fileName: upload.fileName,
+        fileSize: upload.fileSize,
+        fileType: upload.fileType,
+        status: upload.status,
+        progress: upload.progress || 0,
+        url: upload.url,
+        field: upload.field,
+        createdAt: upload.createdAt,
+        updatedAt: upload.updatedAt,
+        uploadSpeed: Math.round(uploadSpeed / 1024), // KB/s
+        estimatedTimeRemaining: estimatedTimeRemaining, // seconds
+        uploadedBytes: uploadedBytes,
+        remainingBytes: upload.fileSize - uploadedBytes,
+        stage: upload.status === 'compressing' ? 'compression' : 
+               upload.status === 'uploading' ? 'upload' : 
+               upload.status === 'completed' ? 'complete' : 'unknown'
+      };
+    });
+    
+    // Calculate overall percentage
+    const overallPercentage = totalSize > 0 ? Math.round((uploadedSize / totalSize) * 100) : 0;
+    
+    return res.json({
+      success: true,
+      uploads: uploadsWithProgress,
+      count: totalFiles,
+      overallProgress: {
+        totalFiles,
+        completedFiles,
+        failedFiles,
+        uploadingFiles,
+        compressingFiles,
+        overallPercentage,
+        totalSize,
+        uploadedSize,
+        remainingSize: totalSize - uploadedSize
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Update the existing getFileUploadsByContentId function
 export const getFileUploadsByContentId = async (req, res) => {
   try {
     const { contentId } = req.params;
@@ -191,9 +319,9 @@ export const getFileUploadsByContentId = async (req, res) => {
       });
     }
     
-    // Find file uploads for the specific content
+    // Find file uploads for the specific content using contentId field
     const fileUploads = await FileUpload.find({ 
-      documentId: contentId,
+      contentId: contentId,
       userId: userId // Ensure user can only see their own uploads
     }).sort({ createdAt: -1 });
     

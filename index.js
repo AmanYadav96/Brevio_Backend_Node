@@ -120,7 +120,10 @@ app.use("/api/subscriptions", subscriptionRoutes);
 app.use("/api/genres", genreRoutes);
 app.use("/api/advertisements", advertisementRoutes);
 app.use("/api/upload", uploadRoutes);
-app.use("/api/file-uploads", fileUploadRoutes);
+// Change this line:
+
+// To this:
+app.use("/api/fileUpload", fileUploadRoutes);
 app.use("/api/creator-content", creatorContentRoutes);
 app.use("/api/channel-subscriptions", channelSubscriptionRoutes);
 app.use("/api/sliders", sliderRoutes);

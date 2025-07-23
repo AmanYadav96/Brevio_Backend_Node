@@ -32,6 +32,11 @@ const fileUploadSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       refPath: 'modelType'
     },
+    // Add contentId field specifically for Content uploads
+    contentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Content'
+    },
     status: {
       type: String,
       enum: ['pending', 'uploading', 'chunking', 'complete', 'completed', 'failed'],
@@ -43,14 +48,6 @@ const fileUploadSchema = new mongoose.Schema(
       min: 0,
       max: 100
     },
-    fileSize: {
-      type: Number, // Size in bytes
-      required: true
-    },
-    fileName: {
-      type: String,
-      required: true
-    },
     url: {
       type: String
     },
@@ -58,6 +55,9 @@ const fileUploadSchema = new mongoose.Schema(
       type: String
     },
     uploadId: {
+      type: String
+    },
+    field: {
       type: String
     }
   },

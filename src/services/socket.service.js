@@ -83,19 +83,44 @@ class SocketService {
   emitUploadStatus(userId, fileId, status, progress, details = {}) {
     if (!this.io) return;
     
-    // Add console logging for upload progress
-    console.log(`Upload progress for file ${fileId}: ${progress}% (${status})`, 
-      details.uploadedBytes && details.totalBytes ? 
-      `${Math.round(details.uploadedBytes / 1024 / 1024 * 100) / 100}MB / ${Math.round(details.totalBytes / 1024 / 1024 * 100) / 100}MB` : 
-      '');
-    
-    this.io.to(`upload-${userId}`).emit('upload-status', {
-      fileId,
+    const progressData = {
+      fileId: fileId.toString(),
       status,
-      progress,
-      ...details,
-      timestamp: Date.now()
+      progress: Math.min(100, Math.max(0, progress)), // Ensure progress is between 0-100
+      timestamp: new Date().toISOString(),
+      ...details
+    };
+    
+    console.log(`Emitting upload status for user ${userId}, file ${fileId}: ${status} ${progress}%`, details);
+    
+    this.io.to(`upload-${userId}`).emit('upload-status', progressData);
+    
+    // Also emit the legacy upload-progress event for backward compatibility
+    this.io.to(`upload-${userId}`).emit('upload-progress', {
+      fileId: fileId.toString(),
+      progress: progressData.progress,
+      status,
+      details
     });
+  }
+
+  // Enhanced upload complete event
+  emitUploadComplete(userId, fileId, url, details = {}) {
+    if (!this.io) return;
+    
+    const completeData = {
+      fileId: fileId.toString(),
+      status: 'completed',
+      progress: 100,
+      url,
+      timestamp: new Date().toISOString(),
+      ...details
+    };
+    
+    console.log(`Upload completed for user ${userId}, file ${fileId}:`, url);
+    
+    this.io.to(`upload-${userId}`).emit('upload-complete', completeData);
+    this.io.to(`upload-${userId}`).emit('upload-status', completeData);
   }
 
   // Emit upload progress to specific user

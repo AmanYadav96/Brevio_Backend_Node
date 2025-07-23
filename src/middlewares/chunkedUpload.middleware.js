@@ -80,6 +80,7 @@ export const initializeUpload = async (c) => {
     const uniqueFileName = `${modelType.toLowerCase()}/${uuidv4()}${fileExtension}`;
     
     // Create a record in the database
+    // Create a record in the database
     const fileUpload = await FileUpload.create({
       userId: user._id,
       fileName,
@@ -87,7 +88,7 @@ export const initializeUpload = async (c) => {
       fileType,
       uploadPath: uniqueFileName,
       modelType,
-      documentId: documentId || null,
+      contentId: documentId || null,
       status: 'pending',
       progress: 0,
       field

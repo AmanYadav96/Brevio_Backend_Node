@@ -170,7 +170,7 @@ export class VideoProcessorService {
   }
   
   // Compress video while maintaining quality
-  async compressVideo(inputPath, outputDir) {
+  async compressVideo(inputPath, outputDir, progressCallback = null) {
     return new Promise((resolve, reject) => {
       try {
         // Create a unique filename for the compressed video
@@ -202,6 +202,7 @@ export class VideoProcessorService {
             const originalBitrate = parseInt(metadata.format.bit_rate) || 8000000 // default to 8Mbps if not available
             const width = videoStream.width
             const height = videoStream.height
+            const duration = metadata.format.duration || 0
             
             // Calculate target bitrate (40% of original, but not less than 800Kbps)
             const targetBitrate = Math.max(Math.round(originalBitrate * 0.4), 800000)
@@ -223,9 +224,15 @@ export class VideoProcessorService {
               .outputOptions('-b:a 128k')    // Audio bitrate
               .output(outputPath)
             
-            // Add progress handler
+            // Add progress handler with callback support
             command.on('progress', (progress) => {
-              console.log(`Compression progress: ${progress.percent ? progress.percent.toFixed(1) : 0}% done`);
+              const percent = progress.percent || 0
+              console.log(`Compression progress: ${percent.toFixed(1)}% done`)
+              
+              // Call the progress callback if provided
+              if (progressCallback && typeof progressCallback === 'function') {
+                progressCallback(percent)
+              }
             })
             
             // Execute the command

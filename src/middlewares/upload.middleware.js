@@ -138,30 +138,167 @@ async function uploadToCloudStorage(filePath, originalName, mimeType, folder, us
   };
 }
 
+// Function to upload file to cloud storage with progress tracking
+async function uploadToCloudStorageWithProgress(filePath, originalName, mimeType, folder, userId, fileUploadId, progressCallback) {
+  // Create a unique filename
+  const fileExtension = path.extname(originalName);
+  const fileName = `${folder}/${uuidv4()}${fileExtension}`;
+  
+  // Set up S3 client for R2
+  const s3Client = new S3Client({
+    region: 'auto',
+    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+    }
+  });
+  
+  // Read file
+  const fileBuffer = fs.readFileSync(filePath);
+  
+  // Create upload command
+  const command = new PutObjectCommand({
+    Bucket: process.env.R2_BUCKET_NAME,
+    Key: fileName,
+    Body: fileBuffer,
+    ContentType: mimeType
+  });
+  
+  // Simulate progress updates during upload
+  const progressIncrements = [25, 50, 75, 95];
+  
+  for (const progress of progressIncrements) {
+    if (progressCallback) {
+      progressCallback(progress);
+    }
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  
+  // Upload to R2
+  await s3Client.send(command);
+  
+  // Final progress update
+  if (progressCallback) {
+    progressCallback(100);
+  }
+  
+  // Return the URL
+  return {
+    url: `${R2_PUBLIC_URL}/${fileName}`,
+    path: fileName
+  };
+}
+
 // Process video with compression
-async function processVideoWithCompression(file, fieldName, uploads, user) {
+async function processVideoWithCompression(file, fieldName, uploads, user, contentId) {
   let compressedFilePath = null;
   
   try {
-    console.log(`Processing video with compression: ${file.originalname}`)
+    // Create FileUpload record for tracking
+    const fileUpload = await FileUpload.create({
+      userId: user.id,
+      fileName: file.originalname,
+      fileSize: file.size,
+      fileType: file.mimetype,
+      uploadPath: `videos/${uuidv4()}${path.extname(file.originalname)}`,
+      modelType: contentId ? 'Content' : 'CREATOR_CONTENT',
+      contentId: contentId || null,
+      status: 'uploading',
+      progress: 0,
+      field: fieldName
+    });
+    
+    // Emit initial status
+    socketService.emitUploadStatus(user.id, fileUpload._id, 'compressing', 0, {
+      stage: 'compression',
+      message: 'Starting video compression...'
+    });
+    
+    console.log(`Processing video with compression: ${file.originalname}`);
     
     // Get temp directory for processing
-    const tempDir = getTempDirectory()
+    const tempDir = getTempDirectory();
     
-    // Compress the video
-    const compressionResult = await videoProcessorService.compressVideo(file.path, tempDir)
+    // Compress the video with progress callback
+    const compressionResult = await videoProcessorService.compressVideo(
+      file.path, 
+      tempDir,
+      (compressionProgress) => {
+        // Compression progress (0-50% of total)
+        const totalProgress = Math.round(compressionProgress * 0.5);
+        
+        // Update database
+        FileUpload.findByIdAndUpdate(fileUpload._id, { 
+          progress: totalProgress,
+          status: 'compressing'
+        }).catch(err => console.error('Error updating compression progress:', err));
+        
+        // Emit progress with compression details
+        socketService.emitUploadStatus(user.id, fileUpload._id, 'compressing', totalProgress, {
+          stage: 'compression',
+          compressionProgress: compressionProgress,
+          message: `Compressing video: ${compressionProgress.toFixed(1)}% complete`
+        });
+      }
+    );
     compressedFilePath = compressionResult.path;
     
-    console.log(`Video compressed: ${file.originalname}, Compression ratio: ${compressionResult.compressionRatio}x`)
+    // Update progress after compression
+    await FileUpload.findByIdAndUpdate(fileUpload._id, { 
+      progress: 50,
+      status: 'uploading'
+    });
     
-    // Upload the compressed file to cloud storage
-    const fileUrl = await uploadToCloudStorage(
+    socketService.emitUploadStatus(user.id, fileUpload._id, 'uploading', 50, {
+      stage: 'upload',
+      message: 'Compression complete, starting upload...',
+      compressionRatio: compressionResult.compressionRatio,
+      originalSize: compressionResult.originalSize,
+      compressedSize: compressionResult.compressedSize
+    });
+    
+    console.log(`Video compressed: ${file.originalname}, Compression ratio: ${compressionResult.compressionRatio}x`);
+    
+    // Upload with progress tracking
+    const fileUrl = await uploadToCloudStorageWithProgress(
       compressionResult.path,
       file.originalname,
       file.mimetype,
       'videos',
-      user.id
-    )
+      user.id,
+      fileUpload._id,
+      (uploadProgress) => {
+        // Upload progress (50-100% of total)
+        const totalProgress = Math.round(50 + (uploadProgress * 0.5));
+        
+        // Update database
+        FileUpload.findByIdAndUpdate(fileUpload._id, { 
+          progress: totalProgress 
+        }).catch(err => console.error('Error updating upload progress:', err));
+        
+        // Emit progress with upload details
+        socketService.emitUploadStatus(user.id, fileUpload._id, 'uploading', totalProgress, {
+          stage: 'upload',
+          uploadProgress: uploadProgress,
+          message: `Uploading compressed video: ${uploadProgress.toFixed(1)}% complete`
+        });
+      }
+    );
+    
+    // Mark as completed
+    await FileUpload.findByIdAndUpdate(fileUpload._id, { 
+      status: 'completed',
+      progress: 100,
+      url: fileUrl.url
+    });
+    
+    socketService.emitUploadComplete(user.id, fileUpload._id, fileUrl.url, {
+      stage: 'complete',
+      message: 'Upload completed successfully',
+      compressionRatio: compressionResult.compressionRatio,
+      finalSize: compressionResult.compressedSize
+    });
     
     // Get video duration
     let duration = null
@@ -296,9 +433,13 @@ export const handleUpload = (type) => {
     try {
       const contentType = req.headers['content-type'] || '';
       console.log('Request path:', req.path);
+      console.log('Request params:', req.params);
       console.log('Content-Type:', contentType);
       console.log('Starting file upload, content type:', req.headers['content-type']);
       console.log('Content length:', req.headers['content-length'], 'bytes');
+      // Extract contentId from route parameters
+      const { contentId } = req.params;
+      console.log('Extracted contentId from params:', contentId);
       
       // Add request timeout listener
       req.on('timeout', () => {
@@ -335,6 +476,7 @@ export const handleUpload = (type) => {
         
         switch (action) {
           case 'initialize':
+            console.log('Initializing chunked upload with params:', req.params);
             result = await initializeChunkedUpload(req, uploadConfig, user);
             return res.json(result);
             
@@ -411,8 +553,12 @@ export const handleUpload = (type) => {
             const isVideo = fieldName === 'videoFile' || fieldName === 'video' || fieldName === 'trailer';
             
             if (isVideo) {
+              // Instead of processVideoWithCompression, redirect to chunked upload
+              // This would require frontend changes to use chunked upload for videos
+              console.log('Video detected, should use chunked upload for progress tracking');
+              
               // Process video with compression
-              const success = await processVideoWithCompression(file, fieldName, uploads, req.user);
+              const success = await processVideoWithCompression(file, fieldName, uploads, req.user,contentId);
               if (!success) {
                 return res.status(500).json({
                   success: false,
@@ -444,9 +590,11 @@ export const handleUpload = (type) => {
                   fileSize: file.size,
                   fileType: file.mimetype,
                   uploadPath: fileName,
-                  modelType: 'Other',
+                  modelType: contentId ? 'Content' : 'Other',
+                  contentId: contentId || null,
                   status: 'chunking',
-                  progress: 0
+                  progress: 0,
+                  field: fieldName
                 });
                 
                 // Initialize multipart upload
@@ -532,9 +680,11 @@ export const handleUpload = (type) => {
                   fileSize: file.size,
                   fileType: file.mimetype,
                   uploadPath: fileName,
-                  modelType: 'Other',
+                  modelType: contentId ? 'Content' : 'Other',
+                  contentId: contentId || null,
                   status: 'uploading',
-                  progress: 0
+                  progress: 0,
+                  field: fieldName
                 });
                 
                 // Update progress to 5% when starting upload to R2
@@ -691,6 +841,13 @@ export const handleUpload = (type) => {
  */
 async function initializeChunkedUpload(req, uploadConfig, user) {
   try {
+    // Add debugging logs
+    console.log('=== DEBUGGING CHUNKED UPLOAD INITIALIZATION ===');
+    console.log('Request URL:', req.url);
+    console.log('Request path:', req.path);
+    console.log('Request params:', req.params);
+    console.log('Request body keys:', Object.keys(req.body || {}));
+    
     // Create a multer instance for metadata parsing
     const metadataStorage = multer.memoryStorage();
     const metadataUpload = multer({ storage: metadataStorage }).none();
@@ -705,6 +862,13 @@ async function initializeChunkedUpload(req, uploadConfig, user) {
     
     // Get fields from request body
     const { fileName, fileSize, fileType, field } = req.body;
+    
+    // Get contentId from route parameters (for video/media uploads)
+    const { contentId } = req.params;
+    
+    // Add more debugging
+    console.log('Extracted contentId from params:', contentId);
+    console.log('Request body after parsing:', req.body);
     
     if (!fileName || !fileSize || !fileType || !field) {
       return {
@@ -746,16 +910,35 @@ async function initializeChunkedUpload(req, uploadConfig, user) {
     const fileExtension = path.extname(fileName);
     const uploadPath = `${uploadConfig.folder}/${uuidv4()}${fileExtension}`;
     
-    // Create file upload record
-    const fileUpload = await FileUpload.create({
+    // Prepare file upload data
+    const fileUploadData = {
       userId: user.id,
       fileName: fileName,
       fileSize: parseInt(fileSize),
       fileType: fileType,
       uploadPath: uploadPath,
-      modelType: 'Other',
+      modelType: contentId ? 'Content' : 'Other',
       status: 'pending',
-      progress: 0
+      progress: 0,
+      field: field
+    };
+    
+    // Add contentId if contentId is provided from route params
+    if (contentId) {
+      fileUploadData.contentId = contentId;
+      console.log('Setting contentId to:', contentId);
+    } else {
+      console.log('No contentId found in route params');
+    }
+    
+    console.log('Final fileUploadData:', fileUploadData);
+    
+    const fileUpload = await FileUpload.create(fileUploadData);
+    
+    console.log('Created FileUpload record:', {
+      _id: fileUpload._id,
+      documentId: fileUpload.documentId,
+      modelType: fileUpload.modelType
     });
     
     // Set up S3 client for R2
