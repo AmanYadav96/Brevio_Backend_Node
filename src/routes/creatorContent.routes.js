@@ -2,6 +2,11 @@ import express from "express"
 import { protect, restrictTo } from "../middlewares/auth.middleware.js"
 import { UserRole } from "../models/user.model.js"
 import { handleUpload } from "../middlewares/upload.middleware.js"
+import { 
+  dbOptimizationMiddleware,
+  creatorContentCacheMiddleware,
+  cacheInvalidationMiddleware 
+} from "../middlewares/dbOptimization.middleware.js"
 import {
   createContentBasic,
   uploadMainVideo,
@@ -23,35 +28,107 @@ import {
 
 const router = express.Router()
 
-// Content creation routes - new workflow
-router.post("/basic", protect, createContentBasic)
-router.post("/:contentId/video", protect, handleUpload('CREATOR_CONTENT'), uploadMainVideo)
-router.post("/:contentId/media", protect, handleUpload('CREATOR_CONTENT'), uploadMediaAssets)
+// Content creation routes - new workflow with cache invalidation
+router.post("/basic", 
+  protect, 
+  cacheInvalidationMiddleware({ patterns: ['content', 'creator'], cacheTypes: ['api'] }),
+  createContentBasic
+)
+router.post("/:contentId/video", 
+  protect, 
+  cacheInvalidationMiddleware({ patterns: ['content'], cacheTypes: ['api'] }),
+  handleUpload('CREATOR_CONTENT'), 
+  uploadMainVideo
+)
+router.post("/:contentId/media", 
+  protect, 
+  cacheInvalidationMiddleware({ patterns: ['content'], cacheTypes: ['api'] }),
+  handleUpload('CREATOR_CONTENT'), 
+  uploadMediaAssets
+)
 
-// Existing routes
-router.post("/:contentId/seasons/:seasonId/episodes", protect, handleUpload('episode'), addEpisode)
-router.post("/:contentId/lessons", protect, handleUpload('lesson'), addLesson)
+// Existing routes with cache invalidation
+router.post("/:contentId/seasons/:seasonId/episodes", 
+  protect, 
+  cacheInvalidationMiddleware({ patterns: ['content'], cacheTypes: ['api'] }),
+  handleUpload('episode'), 
+  addEpisode
+)
+router.post("/:contentId/lessons", 
+  protect, 
+  cacheInvalidationMiddleware({ patterns: ['content'], cacheTypes: ['api'] }),
+  handleUpload('lesson'), 
+  addLesson
+)
 
-// Admin routes
-router.patch("/:contentId/approve", protect, restrictTo(UserRole.ADMIN), approveContent)
-router.patch("/:contentId/reject", protect, restrictTo(UserRole.ADMIN), rejectContent)
-// Add these new routes
-router.patch("/:contentId/review", protect, restrictTo(UserRole.ADMIN), markContentAsReviewed)
-router.post("/bulk/review", protect, restrictTo(UserRole.ADMIN), bulkMarkContentAsReviewed)
+// Admin routes with cache invalidation
+router.patch("/:contentId/approve", 
+  protect, 
+  restrictTo(UserRole.ADMIN), 
+  cacheInvalidationMiddleware({ patterns: ['content'], cacheTypes: ['api'] }),
+  approveContent
+)
+router.patch("/:contentId/reject", 
+  protect, 
+  restrictTo(UserRole.ADMIN), 
+  cacheInvalidationMiddleware({ patterns: ['content'], cacheTypes: ['api'] }),
+  rejectContent
+)
+router.patch("/:contentId/review", 
+  protect, 
+  restrictTo(UserRole.ADMIN), 
+  cacheInvalidationMiddleware({ patterns: ['content'], cacheTypes: ['api'] }),
+  markContentAsReviewed
+)
+router.post("/bulk/review", 
+  protect, 
+  restrictTo(UserRole.ADMIN), 
+  cacheInvalidationMiddleware({ patterns: ['content'], cacheTypes: ['api'] }),
+  bulkMarkContentAsReviewed
+)
 
-// Content retrieval routes
-router.get("/:contentId", getContentById)
-router.get("/", protect, getAllContent)
+// Content retrieval routes with caching
+router.get("/:contentId", 
+  dbOptimizationMiddleware({ cacheType: 'api', ttl: 1800 }), // 30 minutes cache
+  getContentById
+)
+router.get("/", 
+  creatorContentCacheMiddleware({ cacheType: 'api', ttl: 600 }), // 10 minutes cache with shuffle
+  getAllContent
+)
 
-// Purchase route
-router.post("/:contentId/purchase", protect, purchaseEducationalContent)
+// Purchase route with cache invalidation
+router.post("/:contentId/purchase", 
+  protect, 
+  cacheInvalidationMiddleware({ patterns: ['content', 'user'], cacheTypes: ['api'] }),
+  purchaseEducationalContent
+)
 
-// New routes for content editing and deletion
-router.patch("/:contentId", protect, handleUpload('CREATOR_CONTENT'), updateContent)
-router.delete("/:contentId", protect, deleteContent)
+// Content editing and deletion with cache invalidation
+router.patch("/:contentId", 
+  protect, 
+  cacheInvalidationMiddleware({ patterns: ['content'], cacheTypes: ['api'] }),
+  handleUpload('CREATOR_CONTENT'), 
+  updateContent
+)
+router.delete("/:contentId", 
+  protect, 
+  cacheInvalidationMiddleware({ patterns: ['content'], cacheTypes: ['api'] }),
+  deleteContent
+)
 
-// Bulk admin routes
-router.post("/bulk/approve", protect, restrictTo(UserRole.ADMIN), bulkApproveContent)
-router.post("/bulk/reject", protect, restrictTo(UserRole.ADMIN), bulkRejectContent)
+// Bulk operations with cache invalidation
+router.post("/bulk/approve", 
+  protect, 
+  restrictTo(UserRole.ADMIN), 
+  cacheInvalidationMiddleware({ patterns: ['content'], cacheTypes: ['api'] }),
+  bulkApproveContent
+)
+router.post("/bulk/reject", 
+  protect, 
+  restrictTo(UserRole.ADMIN), 
+  cacheInvalidationMiddleware({ patterns: ['content'], cacheTypes: ['api'] }),
+  bulkRejectContent
+)
 
 export default router

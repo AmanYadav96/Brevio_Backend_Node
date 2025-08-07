@@ -4,7 +4,9 @@ dotenv.config();
 // Debug environment variables
 console.log('Environment variables loaded:');
 console.log('FIREBASE_API_KEY:', process.env.FIREBASE_API_KEY);
+console.log('MONGODB_URI:', process.env.MONGODB_URI);
 console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('PORT:', process.env.PORT);
 
 import express from 'express';
 import cors from 'cors';
@@ -15,11 +17,13 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { connectDB } from "./src/config/database.js";
+import { connectDB, closeDB, getConnectionStats } from "./src/config/database.js";
 import socketService from './src/services/socket.service.js';
 import { swaggerSpec } from './src/config/swagger.js';
 import swaggerUi from 'swagger-ui-express';
 import { languageMiddleware } from './src/middlewares/language.middleware.js';
+import cacheService from './src/services/cache.service.js';
+import { dbMonitoringMiddleware } from './src/middlewares/dbOptimization.middleware.js';
 
 // Import routes
 import authRoutes from "./src/routes/auth.routes.js";
@@ -104,6 +108,9 @@ app.use(helmet());
 app.use(express.json({limit:'500mb'}));
 app.use(express.urlencoded({ extended: true , limit: '500mb' }));
 
+// Database monitoring middleware (adds DB stats to headers)
+app.use(dbMonitoringMiddleware);
+
 // Aplicar el middleware de idioma a todas las rutas
 app.use(languageMiddleware);
 
@@ -159,21 +166,81 @@ app.get('/api-docs/debug', (req, res) => {
   });
 });
 
+// Performance monitoring endpoints
+app.get('/api/health/cache', (req, res) => {
+  const cacheStats = cacheService.getStats();
+  res.json({
+    status: 'ok',
+    cache: cacheStats,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/api/health/database', (req, res) => {
+  const dbStats = getConnectionStats();
+  res.json({
+    status: 'ok',
+    database: dbStats,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/api/health/full', (req, res) => {
+  const cacheStats = cacheService.getStats();
+  const dbStats = getConnectionStats();
+  
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    cache: cacheStats,
+    database: dbStats,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Error handling middleware
 app.use(errorHandler);
 
-// Process-level error handlers to prevent server shutdown
+// Graceful shutdown handling
+const gracefulShutdown = async (signal) => {
+  console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
+  
+  try {
+    // Close HTTP server
+    server.close(() => {
+      console.log('✅ HTTP server closed');
+    });
+    
+    // Close database connection
+    await closeDB();
+    
+    // Clear all caches
+    ['users', 'videos', 'channels', 'categories', 'api', 'sessions'].forEach(cacheType => {
+      cacheService.flush(cacheType);
+    });
+    
+    console.log('✅ Graceful shutdown completed');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error during graceful shutdown:', error);
+    process.exit(1);
+  }
+};
+
+// Handle different shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
 process.on('uncaughtException', (error) => {
-  console.error('UNCAUGHT EXCEPTION! 💥');
-  console.error(error.name, error.message, error.stack);
-  // Log the error but keep the server running
-  // For truly fatal errors, you might want to use a process manager like PM2 to restart the process
+  console.error('💥 Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
+  gracefulShutdown('uncaughtException');
 });
 
 process.on('unhandledRejection', (error) => {
-  console.error('UNHANDLED REJECTION! 💥');
-  console.error(error.name, error.message, error.stack);
-  // Log the error but keep the server running
+  console.error('💥 Unhandled Rejection:', error);
+  gracefulShutdown('unhandledRejection');
 });
 
 const options = {

@@ -10,6 +10,9 @@ import { translateContentStatus } from '../utils/statusTranslation.js'
 // Importar la función getBlockedUserIds
 import { getBlockedUserIds } from '../controllers/userBlock.controller.js'
 import { shouldTranslateToSpanish } from '../utils/languageHandler.js';
+// Import Like and Save models for likes count and saved status
+import Like from '../models/like.model.js'
+import Save from '../models/save.model.js'
 
 
 // Create new content
@@ -423,6 +426,7 @@ export const rejectContent = async (req, res) => {
 export const getContentById = async (req, res) => {
   try {
     const { contentId } = req.params
+    const user = req.user; // Get authenticated user if available
     
     const content = await CreatorContent.findById(contentId)
       .populate('creator', 'name username profilePicture')
@@ -438,14 +442,53 @@ export const getContentById = async (req, res) => {
     // Transform URLs in content before sending to client
     const transformedContent = transformAllUrls(content);
     
+    // Get likes count for this content
+    const likesCount = await Like.countDocuments({
+      contentType: 'creatorContent',
+      contentId: contentId
+    });
+    
+    // Check if user has saved this content (only if user is authenticated)
+    let userSaved = false;
+    let savedFolder = null;
+    if (user) {
+      const saveRecord = await Save.findOne({
+        user: user._id,
+        contentType: 'creatorContent',
+        contentId: contentId
+      });
+      userSaved = !!saveRecord;
+      savedFolder = saveRecord ? saveRecord.folder : null;
+    }
+    
+    // Check if user has liked this content (only if user is authenticated)
+    let userLiked = false;
+    if (user) {
+      const likeRecord = await Like.findOne({
+        user: user._id,
+        contentType: 'creatorContent',
+        contentId: contentId
+      });
+      userLiked = !!likeRecord;
+    }
+    
+    // Add likes and saved info to content
+    const contentWithLikesAndSaves = {
+      ...transformedContent,
+      likesCount,
+      userSaved,
+      savedFolder,
+      userLiked
+    };
+    
     // Traducir el estado a español para la respuesta
-    if (transformedContent.status) {
-      transformedContent.statusInSpanish = translateContentStatus(transformedContent.status);
+    if (contentWithLikesAndSaves.status) {
+      contentWithLikesAndSaves.statusInSpanish = translateContentStatus(contentWithLikesAndSaves.status);
     }
     
     return res.json({ 
       success: true, 
-      content: transformedContent
+      content: contentWithLikesAndSaves
     });
   } catch (error) {
     console.error("Get content error:", error)
@@ -539,8 +582,51 @@ export const getAllContent = async (req, res) => {
     // Transform URLs in content before sending to client
     const transformedContent = transformAllUrls(content);
     
+    // Add likes count and saved status for each content
+    const contentWithLikesAndSaves = await Promise.all(
+      transformedContent.map(async (contentItem) => {
+        // Get likes count for this content
+        const likesCount = await Like.countDocuments({
+          contentType: 'creatorContent',
+          contentId: contentItem._id
+        });
+        
+        // Check if user has saved this content (only if user is authenticated)
+        let userSaved = false;
+        let savedFolder = null;
+        if (user) {
+          const saveRecord = await Save.findOne({
+            user: user._id,
+            contentType: 'creatorContent',
+            contentId: contentItem._id
+          });
+          userSaved = !!saveRecord;
+          savedFolder = saveRecord ? saveRecord.folder : null;
+        }
+        
+        // Check if user has liked this content (only if user is authenticated)
+        let userLiked = false;
+        if (user) {
+          const likeRecord = await Like.findOne({
+            user: user._id,
+            contentType: 'creatorContent',
+            contentId: contentItem._id
+          });
+          userLiked = !!likeRecord;
+        }
+        
+        return {
+          ...contentItem,
+          likesCount,
+          userSaved,
+          savedFolder,
+          userLiked
+        };
+      })
+    );
+    
     // Shuffle the content array if needed
-    const shuffledContent = [...transformedContent].sort(() => Math.random() - 0.5);
+    const shuffledContent = [...contentWithLikesAndSaves].sort(() => Math.random() - 0.5);
     
     // Build response based on whether pagination is ignored
     const response = {

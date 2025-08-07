@@ -78,6 +78,19 @@
  *         likes:
  *           type: number
  *           description: Like count
+ *         likesCount:
+ *           type: number
+ *           description: Total number of likes for this content
+ *         userLiked:
+ *           type: boolean
+ *           description: Whether the current authenticated user has liked this content
+ *         userSaved:
+ *           type: boolean
+ *           description: Whether the current authenticated user has saved this content
+ *         savedFolder:
+ *           type: string
+ *           nullable: true
+ *           description: The folder name where the user saved this content (if saved)
  *         videoMetadata:
  *           $ref: '#/components/schemas/VideoMetadata'
  *         adminApproved:

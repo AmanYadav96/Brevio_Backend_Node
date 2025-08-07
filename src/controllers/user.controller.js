@@ -11,6 +11,7 @@ import Report from "../models/report.model.js"
 import EmailService from "../services/email.service.js"
 // Add this import at the top of the file
 import { isIpFromSpain } from "../utils/geolocation.js"
+import cacheService from "../services/cache.service.js"
 
 // Get all users (for admin)
 export const getAllUsers = async (req, res) => {

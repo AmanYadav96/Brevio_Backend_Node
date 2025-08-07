@@ -11,22 +11,28 @@ import {
 } from '../controllers/user.controller.js'
 import { protect, restrictTo } from '../middlewares/auth.middleware.js'
 import { handleUpload, optionalUpload } from '../middlewares/upload.middleware.js'
+import { 
+  dbOptimizationMiddleware, 
+  userProfileCacheMiddleware,
+  realTimeDataMiddleware,
+  analyticsCacheMiddleware
+} from '../middlewares/dbOptimization.middleware.js'
 
 const router = express.Router()
 
 // Apply authentication middleware to all routes
 router.use(protect)
 
-// User profile routes (for regular users)
-router.get('/profile', getUserProfile)
+// User profile routes (for regular users) - no caching for live data
+router.get('/profile', getUserProfile) // No cache - shows live data immediately
 router.patch('/profile', optionalUpload, updateUserProfile)
-router.delete('/account', deleteUserAccount) // Add this route
+router.delete('/account', realTimeDataMiddleware(), deleteUserAccount) // No cache for account deletion
 
 // Admin routes
-router.get('/', restrictTo('admin'), getAllUsers)
-router.get('/stats', restrictTo('admin'), getUserStats)
-router.get('/:id', restrictTo('admin'), getUser)
-router.patch('/:id', restrictTo('admin'), updateUser)
-router.delete('/:id', restrictTo('admin'), deleteUser)
+router.get('/', restrictTo('admin'), dbOptimizationMiddleware(300), getAllUsers) // 5 min cache for user lists
+router.get('/stats', restrictTo('admin'), analyticsCacheMiddleware(600), getUserStats) // 10 min cache for stats
+router.get('/:id', restrictTo('admin'), getUser) // No cache - shows live user data
+router.patch('/:id', restrictTo('admin'), updateUser) // No cache for updates
+router.delete('/:id', restrictTo('admin'), realTimeDataMiddleware(), deleteUser) // No cache for deletions
 
 export default router
