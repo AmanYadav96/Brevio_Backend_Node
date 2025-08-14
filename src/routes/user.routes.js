@@ -12,10 +12,7 @@ import {
 import { protect, restrictTo } from '../middlewares/auth.middleware.js'
 import { handleUpload, optionalUpload } from '../middlewares/upload.middleware.js'
 import { 
-  dbOptimizationMiddleware, 
-  userProfileCacheMiddleware,
-  realTimeDataMiddleware,
-  analyticsCacheMiddleware
+  realTimeDataMiddleware
 } from '../middlewares/dbOptimization.middleware.js'
 
 const router = express.Router()
@@ -29,8 +26,8 @@ router.patch('/profile', optionalUpload, updateUserProfile)
 router.delete('/account', realTimeDataMiddleware(), deleteUserAccount) // No cache for account deletion
 
 // Admin routes
-router.get('/', restrictTo('admin'), dbOptimizationMiddleware(300), getAllUsers) // 5 min cache for user lists
-router.get('/stats', restrictTo('admin'), analyticsCacheMiddleware(600), getUserStats) // 10 min cache for stats
+router.get('/', restrictTo('admin'), getAllUsers) // No cache - live user data
+router.get('/stats', restrictTo('admin'), getUserStats) // No cache - live stats data
 router.get('/:id', restrictTo('admin'), getUser) // No cache - shows live user data
 router.patch('/:id', restrictTo('admin'), updateUser) // No cache for updates
 router.delete('/:id', restrictTo('admin'), realTimeDataMiddleware(), deleteUser) // No cache for deletions

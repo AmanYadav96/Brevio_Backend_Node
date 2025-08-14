@@ -93,7 +93,7 @@ router.get("/:contentId",
   getContentById
 )
 router.get("/", 
-  creatorContentCacheMiddleware({ cacheType: 'api', ttl: 600 }), // 10 minutes cache with shuffle
+  creatorContentCacheMiddleware({ cacheType: 'api', ttl: 120 }), // 2 minutes cache with shuffle - reduced for fresh content
   getAllContent
 )
 

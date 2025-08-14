@@ -106,7 +106,12 @@ export const creatorContentCacheMiddleware = (options = {}) => {
       `${req.method}:${req.originalUrl}:${JSON.stringify(req.query)}:${req.user?.id || 'anonymous'}`
     
     // Remove any shuffle-related params from cache key to cache base data
-    const cacheKey = baseKey.replace(/shuffle[^&]*&?/g, '').replace(/&&/g, '&')
+    let cacheKey = baseKey.replace(/shuffle[^&]*&?/g, '').replace(/&&/g, '&')
+    
+    // Use versioned cache key for content lists to ensure freshness
+    if (req.originalUrl.includes('/content') && req.method === 'GET') {
+      cacheKey = cacheService.getVersionedKey(cacheKey)
+    }
 
     try {
       // Try to get from cache first
@@ -161,7 +166,7 @@ export const creatorContentCacheMiddleware = (options = {}) => {
 
 // Cache invalidation middleware for mutations
 export const cacheInvalidationMiddleware = (options = {}) => {
-  const { patterns = [], cacheTypes = ['api'] } = options
+  const { patterns = [], cacheTypes = ['api'], refreshCache = true } = options
 
   return async (req, res, next) => {
     // Override res.json to invalidate cache after successful mutations
@@ -186,6 +191,14 @@ export const cacheInvalidationMiddleware = (options = {}) => {
             cacheService.invalidatePattern(cacheType, pattern)
           })
         })
+        
+        // For content creation, bump content version to invalidate all content caches
+        if (req.method === 'POST' && req.route.path.includes('content') && refreshCache) {
+          setTimeout(() => {
+            cacheService.bumpContentVersion()
+            console.log('🔄 Content version bumped - all users will get fresh content on next request')
+          }, 100) // Small delay to ensure DB write is complete
+        }
       }
       
       return originalJson.call(this, data)

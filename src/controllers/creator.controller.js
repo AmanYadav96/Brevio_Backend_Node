@@ -8,6 +8,10 @@ import mongoose from 'mongoose';
 import Channel from '../models/channel.model.js';
 import ChannelSubscription from '../models/channelSubscription.model.js';
 import { transformAllUrls } from '../utils/cloudStorage.js';
+import { shouldTranslateToSpanish } from '../utils/languageHandler.js';
+import { translateContentStatus } from '../utils/statusTranslation.js';
+import { translateAgeRating } from '../utils/ageRatingTranslation.js';
+import { translateContentType } from '../utils/contentTypeTranslation.js';
 
 /**
  * Get creator dashboard statistics and data
@@ -144,12 +148,6 @@ export const getCreatorDashboard = async (req, res) => {
  * @param {Object} res - Response
  * @returns {Object} Creator statistics and content data
  */
-// Añadir esta importación al principio del archivo junto con las demás importaciones
-import { shouldTranslateToSpanish } from '../utils/languageHandler.js';
-import { translateContentStatus } from '../utils/statusTranslation.js';
-import { translateAgeRating } from '../utils/ageRatingTranslation.js';
-import { translateContentType } from '../utils/contentTypeTranslation.js';
-
 export const getCreatorStats = async (req, res) => {
   try {
     const user = req.user;
@@ -410,7 +408,15 @@ export const searchCreators = async (req, res) => {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
         { username: { $regex: search, $options: 'i' } },
-        { bio: { $regex: search, $options: 'i' } }
+        { 
+          bio: { 
+            $exists: true, 
+            $ne: null, 
+            $ne: '', 
+            $regex: search, 
+            $options: 'i' 
+          } 
+        }
       ];
     }
     

@@ -40,6 +40,10 @@ let cacheStats = {
   errors: 0
 }
 
+// Cache versioning for content freshness
+let contentVersion = Date.now()
+const versionedKeys = new Set(['content_list', 'creator_content', 'all_content'])
+
 // Generic cache service class
 class CacheService {
   constructor() {
@@ -204,6 +208,30 @@ class CacheService {
       console.error(`💥 Cache INVALIDATE Error [${cacheType}]:`, error.message)
       return 0
     }
+  }
+
+  // Cache versioning methods
+  getVersionedKey(baseKey) {
+    if (versionedKeys.has(baseKey)) {
+      return `${baseKey}:v${contentVersion}`
+    }
+    return baseKey
+  }
+
+  bumpContentVersion() {
+    contentVersion = Date.now()
+    console.log(`🔄 Content version bumped to: ${contentVersion}`)
+    
+    // Invalidate all versioned content caches
+    versionedKeys.forEach(baseKey => {
+      this.invalidatePattern('api', baseKey)
+    })
+    
+    return contentVersion
+  }
+
+  getCurrentContentVersion() {
+    return contentVersion
   }
 }
 

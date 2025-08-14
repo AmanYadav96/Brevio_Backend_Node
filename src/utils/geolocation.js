@@ -37,6 +37,12 @@ export const getCountryFromIp = (ip) => {
  * @returns {boolean} - True if IP is from Spain
  */
 export const isIpFromSpain = (ip) => {
+  // In development mode, always return true to allow testing
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Development mode: Allowing creator registration from any location');
+    return true;
+  }
+  
   const country = getCountryFromIp(ip);
   return country === 'ES'; // ES is the country code for Spain
 };
