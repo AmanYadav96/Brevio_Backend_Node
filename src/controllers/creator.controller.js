@@ -265,11 +265,8 @@ export const getCreatorProfileById = async (req, res) => {
   try {
     const { creatorId } = req.params;
     
-    // Aplicar traducciones si es necesario
-    if (translateToSpanish) {
-      // Aplicar traducciones a los datos necesarios
-      // ...
-    }
+    // Check if translation to Spanish is needed
+    const translateToSpanish = shouldTranslateToSpanish(req);
     
     // Validate MongoDB ObjectId
     if (!mongoose.Types.ObjectId.isValid(creatorId)) {
@@ -403,20 +400,12 @@ export const searchCreators = async (req, res) => {
     
     const query = { role: UserRole.CREATOR };
     
-    // Apply search filter if provided
+    // Apply search filter if provided - using simple regex without complex operators
     if (search) {
+      const searchRegex = new RegExp(search, 'i');
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { username: { $regex: search, $options: 'i' } },
-        { 
-          bio: { 
-            $exists: true, 
-            $ne: null, 
-            $ne: '', 
-            $regex: search, 
-            $options: 'i' 
-          } 
-        }
+        { name: searchRegex },
+        { username: searchRegex }
       ];
     }
     

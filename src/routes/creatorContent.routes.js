@@ -23,7 +23,12 @@ import {
   updateContent,
   deleteContent,
   markContentAsReviewed,
-  bulkMarkContentAsReviewed
+  bulkMarkContentAsReviewed,
+  createSeries,
+  createCourse,
+  addLessonToCourse,
+  addSeasonToSeries,
+  addEpisodeToSeason
 } from "../controllers/creatorContent.controller.js"
 
 const router = express.Router()
@@ -45,6 +50,38 @@ router.post("/:contentId/media",
   cacheInvalidationMiddleware({ patterns: ['content'], cacheTypes: ['api'] }),
   handleUpload('CREATOR_CONTENT'), 
   uploadMediaAssets
+)
+
+// New content type creation routes
+router.post("/series", 
+  protect, 
+  cacheInvalidationMiddleware({ patterns: ['content', 'creator'], cacheTypes: ['api'] }),
+  handleUpload('CREATOR_CONTENT'), 
+  createSeries
+)
+router.post("/course", 
+  protect, 
+  cacheInvalidationMiddleware({ patterns: ['content', 'creator'], cacheTypes: ['api'] }),
+  handleUpload('CREATOR_CONTENT'), 
+  createCourse
+)
+router.post("/:contentId/lessons/add", 
+  protect, 
+  cacheInvalidationMiddleware({ patterns: ['content'], cacheTypes: ['api'] }),
+  handleUpload('lesson'), 
+  addLessonToCourse
+)
+router.post("/:contentId/seasons/add", 
+  protect, 
+  cacheInvalidationMiddleware({ patterns: ['content'], cacheTypes: ['api'] }),
+  handleUpload('season'), 
+  addSeasonToSeries
+)
+router.post("/:contentId/seasons/:seasonId/episodes/add", 
+  protect, 
+  cacheInvalidationMiddleware({ patterns: ['content'], cacheTypes: ['api'] }),
+  handleUpload('episode'), 
+  addEpisodeToSeason
 )
 
 // Existing routes with cache invalidation

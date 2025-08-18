@@ -233,7 +233,12 @@ const creatorContentSchema = new mongoose.Schema({
   },
   rejectionReason: {
     type: String
-  }
+  },
+  // Series-specific fields
+  seasons: [seasonSchema],
+  // Educational content-specific fields
+  lessons: [lessonSchema],
+  pricing: pricingSchema
 }, { timestamps: true })
 
 // Add validation for content type specific fields

@@ -823,6 +823,394 @@
  *       404:
  *         description: Content not found
  */
+
+/**
+ * @swagger
+ * /api/creator-content/series:
+ *   post:
+ *     summary: Create new series content with seasons
+ *     tags: [Creator Content]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - description
+ *               - orientation
+ *               - channel
+ *               - ageRating
+ *               - thumbnail
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 description: Series title
+ *               description:
+ *                 type: string
+ *                 description: Series description
+ *               orientation:
+ *                 type: string
+ *                 enum: [vertical, horizontal]
+ *                 description: Video orientation
+ *               channel:
+ *                 type: string
+ *                 description: Channel ID
+ *               ageRating:
+ *                 type: string
+ *                 enum: [G, PG, PG-13, R, NC-17, TV-Y, TV-Y7, TV-G, TV-PG, TV-14, TV-MA]
+ *                 description: Age rating
+ *               genres:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Genre IDs
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Content tags
+ *               releaseYear:
+ *                 type: number
+ *                 description: Year of release
+ *               seasons:
+ *                 type: string
+ *                 description: JSON string of seasons array
+ *               thumbnail:
+ *                 type: string
+ *                 format: binary
+ *                 description: Thumbnail image
+ *               verticalBanner:
+ *                 type: string
+ *                 format: binary
+ *                 description: Vertical banner image
+ *               horizontalBanner:
+ *                 type: string
+ *                 format: binary
+ *                 description: Horizontal banner image
+ *               trailer:
+ *                 type: string
+ *                 format: binary
+ *                 description: Trailer video
+ *     responses:
+ *       201:
+ *         description: Series created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 content:
+ *                   $ref: '#/components/schemas/CreatorContent'
+ *                 message:
+ *                   type: string
+ *                   example: Series created successfully
+ *       400:
+ *         description: Invalid input or validation error
+ *       403:
+ *         description: Unauthorized
+ *
+ * /api/creator-content/course:
+ *   post:
+ *     summary: Create new educational course with lessons
+ *     tags: [Creator Content]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - description
+ *               - orientation
+ *               - channel
+ *               - ageRating
+ *               - thumbnail
+ *               - pricing
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 description: Course title
+ *               description:
+ *                 type: string
+ *                 description: Course description
+ *               orientation:
+ *                 type: string
+ *                 enum: [vertical, horizontal]
+ *                 description: Video orientation
+ *               channel:
+ *                 type: string
+ *                 description: Channel ID
+ *               ageRating:
+ *                 type: string
+ *                 enum: [G, PG, PG-13, R, NC-17, TV-Y, TV-Y7, TV-G, TV-PG, TV-14, TV-MA]
+ *                 description: Age rating
+ *               genres:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Genre IDs
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Content tags
+ *               releaseYear:
+ *                 type: number
+ *                 description: Year of release
+ *               lessons:
+ *                 type: string
+ *                 description: JSON string of lessons array
+ *               pricing:
+ *                 type: string
+ *                 description: JSON string of pricing object
+ *               thumbnail:
+ *                 type: string
+ *                 format: binary
+ *                 description: Thumbnail image
+ *               verticalBanner:
+ *                 type: string
+ *                 format: binary
+ *                 description: Vertical banner image
+ *               horizontalBanner:
+ *                 type: string
+ *                 format: binary
+ *                 description: Horizontal banner image
+ *               trailer:
+ *                 type: string
+ *                 format: binary
+ *                 description: Trailer video
+ *     responses:
+ *       201:
+ *         description: Course created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 content:
+ *                   $ref: '#/components/schemas/CreatorContent'
+ *                 message:
+ *                   type: string
+ *                   example: Course created successfully
+ *       400:
+ *         description: Invalid input or validation error
+ *       403:
+ *         description: Unauthorized
+ *
+ * /api/creator-content/{contentId}/lessons/add:
+ *   post:
+ *     summary: Add lesson to existing educational content
+ *     tags: [Creator Content]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Content ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - description
+ *               - videoFile
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 description: Lesson title
+ *               description:
+ *                 type: string
+ *                 description: Lesson description
+ *               videoFile:
+ *                 type: string
+ *                 format: binary
+ *                 description: Video file
+ *               thumbnail:
+ *                 type: string
+ *                 format: binary
+ *                 description: Thumbnail image
+ *               isFree:
+ *                 type: boolean
+ *                 description: Whether lesson is free
+ *               order:
+ *                 type: number
+ *                 description: Lesson order
+ *     responses:
+ *       200:
+ *         description: Lesson added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 content:
+ *                   $ref: '#/components/schemas/CreatorContent'
+ *                 message:
+ *                   type: string
+ *                   example: Lesson added successfully
+ *       400:
+ *         description: Invalid input or content type mismatch
+ *       403:
+ *         description: Unauthorized
+ *       404:
+ *         description: Content not found
+ *
+ * /api/creator-content/{contentId}/seasons/add:
+ *   post:
+ *     summary: Add season to existing series content
+ *     tags: [Creator Content]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Content ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - seasonNumber
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 description: Season title
+ *               description:
+ *                 type: string
+ *                 description: Season description
+ *               seasonNumber:
+ *                 type: number
+ *                 description: Season number
+ *               episodes:
+ *                 type: string
+ *                 description: JSON string of episodes array
+ *               thumbnail:
+ *                 type: string
+ *                 format: binary
+ *                 description: Season thumbnail image
+ *     responses:
+ *       200:
+ *         description: Season added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 content:
+ *                   $ref: '#/components/schemas/CreatorContent'
+ *                 message:
+ *                   type: string
+ *                   example: Season added successfully
+ *       400:
+ *         description: Invalid input or content type mismatch
+ *       403:
+ *         description: Unauthorized
+ *       404:
+ *         description: Content not found
+ *
+ * /api/creator-content/{contentId}/seasons/{seasonId}/episodes/add:
+ *   post:
+ *     summary: Add episode to existing season
+ *     tags: [Creator Content]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Content ID
+ *       - in: path
+ *         name: seasonId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Season ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - description
+ *               - episodeNumber
+ *               - videoFile
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 description: Episode title
+ *               description:
+ *                 type: string
+ *                 description: Episode description
+ *               episodeNumber:
+ *                 type: number
+ *                 description: Episode number
+ *               videoFile:
+ *                 type: string
+ *                 format: binary
+ *                 description: Video file
+ *               thumbnail:
+ *                 type: string
+ *                 format: binary
+ *                 description: Episode thumbnail image
+ *     responses:
+ *       200:
+ *         description: Episode added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 content:
+ *                   $ref: '#/components/schemas/CreatorContent'
+ *                 message:
+ *                   type: string
+ *                   example: Episode added successfully
+ *       400:
+ *         description: Invalid input or validation error
+ *       403:
+ *         description: Unauthorized
+ *       404:
+ *         description: Content or season not found
+ */
+
 /**
  * @swagger
  * /api/creator-content/basic:

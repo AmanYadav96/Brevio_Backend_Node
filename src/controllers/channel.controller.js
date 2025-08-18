@@ -8,7 +8,7 @@ export const createChannel = async (req, res) => {
     const user = req.user // Get the authenticated user
 
     if (uploads.thumbnail) {
-      body.thumbnail = uploads.thumbnail
+      body.thumbnail = uploads.thumbnail.url  // Extract just the URL
     }
 
     // Add the owner information

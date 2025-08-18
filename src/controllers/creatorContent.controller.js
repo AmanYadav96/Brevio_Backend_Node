@@ -1492,3 +1492,503 @@ export const bulkMarkContentAsReviewed = async (req, res) => {
     })
   }
 }
+
+// Create educational course content with lessons
+export const createCourse = async (req, res) => {
+  try {
+    const user = req.user
+    const uploads = req.uploads || {}
+    
+    // Check if user is creator or admin
+    if (user.role !== UserRole.CREATOR && user.role !== UserRole.ADMIN) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Only creators and admins can create courses" 
+      })
+    }
+    
+    const { title, description, orientation, genre, tags, ageRating, releaseYear, lessons, pricing } = req.body
+    
+    // Validate required fields
+    if (!title || !description || !orientation) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title, description, and orientation are required'
+      })
+    }
+    
+    // Validate lessons data
+    if (!lessons || !Array.isArray(lessons) || lessons.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one lesson is required for courses'
+      })
+    }
+    
+    // Parse lessons if they come as string
+    let parsedLessons
+    try {
+      parsedLessons = typeof lessons === 'string' ? JSON.parse(lessons) : lessons
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid lessons data format'
+      })
+    }
+    
+    // Parse pricing if provided
+    let parsedPricing = {
+      model: PricingModel.FREE,
+      price: 0,
+      currency: 'USD'
+    }
+    
+    if (pricing) {
+      try {
+        parsedPricing = typeof pricing === 'string' ? JSON.parse(pricing) : pricing
+        
+        // Validate pricing model
+        if (!Object.values(PricingModel).includes(parsedPricing.model)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid pricing model. Must be free, paid, or subscription'
+          })
+        }
+        
+        // Validate price for paid content
+        if (parsedPricing.model === PricingModel.PAID && (!parsedPricing.price || parsedPricing.price <= 0)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Price must be greater than 0 for paid content'
+          })
+        }
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid pricing data format'
+        })
+      }
+    }
+    
+    // Create course content
+    const courseData = {
+      title,
+      description,
+      contentType: ContentType.EDUCATIONAL,
+      orientation,
+      creator: user._id,
+      genre,
+      tags: tags ? (Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim())) : [],
+      ageRating: ageRating || '12+',
+      releaseYear,
+      status: user.role === UserRole.ADMIN ? 'published' : 'draft',
+      adminApproved: user.role === UserRole.ADMIN,
+      lessons: parsedLessons,
+      pricing: parsedPricing,
+      mediaAssets: {
+        thumbnail: uploads.thumbnail?.url || uploads.thumbnail,
+        verticalBanner: uploads.verticalBanner?.url || uploads.verticalBanner,
+        horizontalBanner: uploads.horizontalBanner?.url || uploads.horizontalBanner,
+        trailer: uploads.trailer?.url || uploads.trailer,
+        trailerDuration: uploads.trailerDuration || 0
+      }
+    }
+    
+    const course = await CreatorContent.create(courseData)
+    
+    res.status(201).json({
+      success: true,
+      message: 'Course created successfully',
+      content: course
+    })
+    
+  } catch (error) {
+    console.error('Error creating course:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    })
+  }
+}
+
+// Add lesson to existing educational content
+export const addLessonToCourse = async (req, res) => {
+  try {
+    const user = req.user
+    const { contentId } = req.params
+    const uploads = req.uploads || {}
+    
+    // Check if user is creator or admin
+    if (user.role !== UserRole.CREATOR && user.role !== UserRole.ADMIN) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Only creators and admins can add lessons" 
+      })
+    }
+    
+    // Find the content
+    const content = await CreatorContent.findById(contentId)
+    
+    if (!content) {
+      return res.status(404).json({
+        success: false,
+        message: 'Content not found'
+      })
+    }
+    
+    // Verify content type is educational
+    if (content.contentType !== ContentType.EDUCATIONAL) {
+      return res.status(400).json({
+        success: false,
+        message: 'This operation is only valid for educational content'
+      })
+    }
+    
+    // Verify user owns the content (unless admin)
+    if (user.role !== UserRole.ADMIN && content.creator.toString() !== user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only add lessons to your own content'
+      })
+    }
+    
+    const { title, description, duration, order, isFree } = req.body
+    
+    // Validate required fields
+    if (!title || !description) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title and description are required'
+      })
+    }
+    
+    // Validate video file
+    if (!uploads.videoFile) {
+      return res.status(400).json({
+        success: false,
+        message: 'Video file is required for lessons'
+      })
+    }
+    
+    // Create new lesson
+    const newLesson = {
+      title,
+      description,
+      videoUrl: uploads.videoFile?.url || uploads.videoFile,
+      duration: duration || 0,
+      thumbnail: uploads.thumbnail?.url || uploads.thumbnail,
+      order: order || (content.lessons ? content.lessons.length + 1 : 1),
+      isFree: isFree === 'true' || isFree === true || false
+    }
+    
+    // Add lesson to content
+    if (!content.lessons) {
+      content.lessons = []
+    }
+    
+    content.lessons.push(newLesson)
+    
+    // Save the updated content
+    await content.save()
+    
+    res.status(201).json({
+      success: true,
+      message: 'Lesson added successfully',
+      lesson: newLesson,
+      content: content
+    })
+    
+  } catch (error) {
+    console.error('Error adding lesson:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    })
+  }
+}
+
+// Add season to existing series
+export const addSeasonToSeries = async (req, res) => {
+  try {
+    const user = req.user
+    const { contentId } = req.params
+    const uploads = req.uploads || {}
+    
+    // Check if user is creator or admin
+    if (user.role !== UserRole.CREATOR && user.role !== UserRole.ADMIN) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Only creators and admins can add seasons" 
+      })
+    }
+    
+    // Find the content
+    const content = await CreatorContent.findById(contentId)
+    
+    if (!content) {
+      return res.status(404).json({
+        success: false,
+        message: 'Content not found'
+      })
+    }
+    
+    // Verify content type is series
+    if (content.contentType !== ContentType.SERIES) {
+      return res.status(400).json({
+        success: false,
+        message: 'This operation is only valid for series content'
+      })
+    }
+    
+    // Verify user owns the content (unless admin)
+    if (user.role !== UserRole.ADMIN && content.creator.toString() !== user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only add seasons to your own content'
+      })
+    }
+    
+    const { title, description, seasonNumber, episodes } = req.body
+    
+    // Validate required fields
+    if (!title || !seasonNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title and season number are required'
+      })
+    }
+    
+    // Parse episodes if provided
+    let parsedEpisodes = []
+    if (episodes) {
+      try {
+        parsedEpisodes = typeof episodes === 'string' ? JSON.parse(episodes) : episodes
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid episodes data format'
+        })
+      }
+    }
+    
+    // Create new season
+    const newSeason = {
+      title,
+      description,
+      seasonNumber: parseInt(seasonNumber),
+      episodes: parsedEpisodes,
+      thumbnail: uploads.thumbnail?.url || uploads.thumbnail
+    }
+    
+    // Add season to content
+    if (!content.seasons) {
+      content.seasons = []
+    }
+    
+    content.seasons.push(newSeason)
+    
+    // Save the updated content
+    await content.save()
+    
+    res.status(201).json({
+      success: true,
+      message: 'Season added successfully',
+      season: newSeason,
+      content: content
+    })
+    
+  } catch (error) {
+    console.error('Error adding season:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    })
+  }
+}
+
+// Create series content with seasons
+export const createSeries = async (req, res) => {
+  try {
+    const user = req.user
+    const uploads = req.uploads || {}
+    
+    // Check if user is creator or admin
+    if (user.role !== UserRole.CREATOR && user.role !== UserRole.ADMIN) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Only creators and admins can create series" 
+      })
+    }
+    
+    const { title, description, orientation, genre, tags, ageRating, releaseYear, seasons } = req.body
+    
+    // Validate required fields
+    if (!title || !description || !orientation) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title, description, and orientation are required'
+      })
+    }
+    
+    // Validate seasons data
+    if (!seasons || !Array.isArray(seasons) || seasons.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one season is required for series'
+      })
+    }
+    
+    // Parse seasons if they come as string
+    let parsedSeasons
+    try {
+      parsedSeasons = typeof seasons === 'string' ? JSON.parse(seasons) : seasons
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid seasons data format'
+      })
+    }
+    
+    // Create series content
+    const seriesData = {
+      title,
+      description,
+      contentType: ContentType.SERIES,
+      orientation,
+      creator: user._id,
+      genre,
+      tags: tags ? (Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim())) : [],
+      ageRating: ageRating || '12+',
+      releaseYear,
+      status: user.role === UserRole.ADMIN ? 'published' : 'draft',
+      adminApproved: user.role === UserRole.ADMIN,
+      seasons: parsedSeasons,
+      mediaAssets: {
+        thumbnail: uploads.thumbnail?.url || uploads.thumbnail,
+        verticalBanner: uploads.verticalBanner?.url || uploads.verticalBanner,
+        horizontalBanner: uploads.horizontalBanner?.url || uploads.horizontalBanner,
+        trailer: uploads.trailer?.url || uploads.trailer,
+        trailerDuration: uploads.trailerDuration || 0
+      }
+    }
+    
+    const series = await CreatorContent.create(seriesData)
+    
+    res.status(201).json({
+      success: true,
+      message: 'Series created successfully',
+      content: series
+    })
+    
+  } catch (error) {
+    console.error('Error creating series:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    })
+  }
+}
+
+// Add episode to existing season
+export const addEpisodeToSeason = async (req, res) => {
+  try {
+    const { contentId, seasonId } = req.params
+    const { title, description, episodeNumber } = req.body
+    const userId = req.user._id
+    const userRole = req.user.role
+
+    // Validate required fields
+    if (!title || !description || !episodeNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title, description, and episode number are required'
+      })
+    }
+
+    // Find the content
+    const content = await CreatorContent.findById(contentId)
+    if (!content) {
+      return res.status(404).json({
+        success: false,
+        message: 'Content not found'
+      })
+    }
+
+    // Check if user is creator or admin
+    if (content.creator.toString() !== userId.toString() && userRole !== UserRole.ADMIN) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to add episodes to this content'
+      })
+    }
+
+    // Check if content is a series
+    if (content.contentType !== ContentType.SERIES) {
+      return res.status(400).json({
+        success: false,
+        message: 'Can only add episodes to series content'
+      })
+    }
+
+    // Find the season
+    const season = content.seasons.id(seasonId)
+    if (!season) {
+      return res.status(404).json({
+        success: false,
+        message: 'Season not found'
+      })
+    }
+
+    // Check if episode number already exists in this season
+    const existingEpisode = season.episodes.find(ep => ep.episodeNumber === parseInt(episodeNumber))
+    if (existingEpisode) {
+      return res.status(400).json({
+        success: false,
+        message: `Episode ${episodeNumber} already exists in this season`
+      })
+    }
+
+    // Create episode object
+    const episodeData = {
+      title,
+      description,
+      episodeNumber: parseInt(episodeNumber)
+    }
+
+    // Handle file uploads if present
+    if (req.uploads) {
+      if (req.uploads.videoFile) {
+        episodeData.videoUrl = req.uploads.videoFile.url
+        episodeData.duration = req.uploads.videoFile.duration || 0
+      }
+      if (req.uploads.thumbnail) {
+        episodeData.thumbnail = req.uploads.thumbnail.url
+      }
+    }
+
+    // Add episode to season
+    season.episodes.push(episodeData)
+    await content.save()
+
+    res.status(201).json({
+      success: true,
+      message: 'Episode added successfully',
+      data: {
+        contentId: content._id,
+        seasonId: season._id,
+        episode: season.episodes[season.episodes.length - 1]
+      }
+    })
+  } catch (error) {
+    console.error('Error adding episode to season:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    })
+  }
+}
