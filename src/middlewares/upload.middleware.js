@@ -258,7 +258,19 @@ async function processVideoWithCompression(file, fieldName, uploads, user, conte
       compressedSize: compressionResult.compressedSize
     });
     
-    console.log(`Video compressed: ${file.originalname}, Compression ratio: ${compressionResult.compressionRatio}x`);
+    console.log(`Video compressed: ${file.originalname}, Compression ratio: ${compressionResult.compressionRatio}x${compressionResult.fallback ? ' (using fallback)' : ''}`);
+    
+    // Emit status update with fallback information if applicable
+    socketService.emitUploadStatus(user.id, fileUpload._id, 'uploading', 50, {
+      stage: 'upload',
+      message: compressionResult.fallback ? 
+        'Compression failed, using original file for upload...' : 
+        'Compression complete, starting upload...',
+      compressionRatio: compressionResult.compressionRatio,
+      originalSize: compressionResult.originalSize,
+      compressedSize: compressionResult.compressedSize,
+      fallback: compressionResult.fallback || false
+    });
     
     // Upload with progress tracking
     const fileUrl = await uploadToCloudStorageWithProgress(

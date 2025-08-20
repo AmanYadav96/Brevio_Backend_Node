@@ -173,118 +173,144 @@ export class VideoProcessorService {
   async compressVideo(inputPath, outputDir, progressCallback = null) {
     return new Promise((resolve, reject) => {
       try {
-        // Create a unique filename for the compressed video
-        const originalExt = path.extname(inputPath)
-        const filename = `compressed_${uuidv4()}${originalExt}`
-        const outputPath = path.join(outputDir, filename)
-        
+        // Validate input file exists
+        if (!fs.existsSync(inputPath)) {
+          throw new Error(`Input file does not exist: ${inputPath}`)
+        }
+
+        // Validate input file is not empty
+        const inputStats = fs.statSync(inputPath)
+        if (inputStats.size === 0) {
+          throw new Error(`Input file is empty: ${inputPath}`)
+        }
+
         // Ensure output directory exists
         if (!fs.existsSync(outputDir)) {
           fs.mkdirSync(outputDir, { recursive: true })
         }
+
+        const filename = `compressed_${uuidv4()}.mp4`
+        const outputPath = path.join(outputDir, filename)
         
         console.log(`Compressing video: ${inputPath} -> ${outputPath}`)
-        
-        // Get video metadata first to make intelligent compression decisions
-        ffmpeg.ffprobe(inputPath, (err, metadata) => {
-          if (err) {
-            console.error('FFprobe error during compression:', err)
-            return reject(err)
-          }
+
+        // Create ffmpeg command with more conservative settings
+        const command = ffmpeg(inputPath)
+          .videoCodec('libx264')
+          .audioCodec('aac')
+          .outputOptions([
+            '-preset medium',
+            '-crf 28',
+            '-maxrate 5M',
+            '-bufsize 10M',
+            '-profile:v high',
+            '-level 4.1',
+            '-movflags +faststart',  // Optimize for web streaming
+            '-pix_fmt yuv420p'       // Ensure compatibility
+          ])
+          .audioFrequency(44100)
+          .audioBitrate('128k')
+          .output(outputPath)
+
+        // Add progress handler with callback support
+        command.on('progress', (progress) => {
+          const percent = progress.percent || 0
+          console.log(`Compression progress: ${percent.toFixed(1)}% done`)
           
-          try {
-            const videoStream = metadata.streams.find(stream => stream.codec_type === 'video')
-            if (!videoStream) {
-              return reject(new Error('No video stream found'))
-            }
-            
-            // Get original bitrate and resolution
-            const originalBitrate = parseInt(metadata.format.bit_rate) || 8000000 // default to 8Mbps if not available
-            const width = videoStream.width
-            const height = videoStream.height
-            const duration = metadata.format.duration || 0
-            
-            // Calculate target bitrate (40% of original, but not less than 800Kbps)
-            const targetBitrate = Math.max(Math.round(originalBitrate * 0.4), 800000)
-            
-            // Start FFmpeg command
-            const command = ffmpeg(inputPath)
-              .outputOptions([
-                '-c:v libx264',              // Use H.264 codec
-                '-preset medium',            // Balance between compression speed and quality
-                `-b:v ${targetBitrate}`,     // Target bitrate (reduced to 40% of original)
-                '-maxrate 5M',              // Maximum bitrate (reduced from 8M)
-                '-bufsize 10M',             // Buffer size (reduced from 16M)
-                '-movflags +faststart',     // Optimize for web streaming
-                '-profile:v high',          // High profile for better quality
-                '-level 4.1',               // Compatibility level
-                '-crf 28'                   // Increased CRF for better compression (higher value = smaller file)
-              ])
-              .outputOptions('-c:a aac')     // Use AAC for audio
-              .outputOptions('-b:a 128k')    // Audio bitrate
-              .output(outputPath)
-            
-            // Add progress handler with callback support
-            command.on('progress', (progress) => {
-              const percent = progress.percent || 0
-              console.log(`Compression progress: ${percent.toFixed(1)}% done`)
-              
-              // Call the progress callback if provided
-              if (progressCallback && typeof progressCallback === 'function') {
-                progressCallback(percent)
-              }
-            })
-            
-            // Execute the command
-            command.on('end', () => {
-              // Get file sizes for comparison
-              const originalSize = fs.statSync(inputPath).size
-              const compressedSize = fs.statSync(outputPath).size
-              const compressionRatio = (originalSize / compressedSize).toFixed(2)
-              
-              console.log(`Compression complete! Original: ${(originalSize/1024/1024).toFixed(2)}MB, ` +
-                          `Compressed: ${(compressedSize/1024/1024).toFixed(2)}MB, ` +
-                          `Ratio: ${compressionRatio}x`)
-              
-              // If compression made the file larger, use the original instead
-              if (compressedSize > originalSize) {
-                console.log('Compression increased file size. Using original file instead.')
-                // Copy original to the output path
-                fs.copyFileSync(inputPath, outputPath)
-                
-                resolve({
-                  path: outputPath,
-                  originalSize,
-                  compressedSize: originalSize,
-                  compressionRatio: '1.00',
-                  filename
-                })
-              } else {
-                resolve({
-                  path: outputPath,
-                  originalSize,
-                  compressedSize,
-                  compressionRatio,
-                  filename
-                })
-              }
-            })
-            
-            command.on('error', (err) => {
-              console.error('FFmpeg compression error:', err)
-              reject(err)
-            })
-            
-            // Run the command
-            command.run()
-            
-          } catch (error) {
-            console.error('Error during compression setup:', error)
-            reject(error)
+          // Call the progress callback if provided
+          if (progressCallback && typeof progressCallback === 'function') {
+            progressCallback(percent)
           }
         })
+
+        // Execute the command
+        command.on('end', () => {
+          try {
+            // Get file sizes for comparison
+            const originalSize = fs.statSync(inputPath).size
+            const compressedSize = fs.statSync(outputPath).size
+            const compressionRatio = (originalSize / compressedSize).toFixed(2)
+            
+            console.log(`Compression complete! Original: ${(originalSize/1024/1024).toFixed(2)}MB, ` +
+                        `Compressed: ${(compressedSize/1024/1024).toFixed(2)}MB, ` +
+                        `Ratio: ${compressionRatio}x`)
+            
+            // If compression made the file larger, use the original instead
+            if (compressedSize > originalSize) {
+              console.log('Compression increased file size. Using original file instead.')
+              // Copy original to the output path
+              fs.copyFileSync(inputPath, outputPath)
+              
+              resolve({
+                path: outputPath,
+                originalSize,
+                compressedSize: originalSize,
+                compressionRatio: '1.00',
+                filename
+              })
+            } else {
+              resolve({
+                path: outputPath,
+                originalSize,
+                compressedSize,
+                compressionRatio,
+                filename
+              })
+            }
+          } catch (endError) {
+            console.error('Error in compression end handler:', endError)
+            reject(endError)
+          }
+        })
+
+        command.on('error', (err) => {
+          console.error('FFmpeg compression error:', err)
+          console.error('FFmpeg command that failed:', command._getArguments().join(' '))
+          console.error('Input file:', inputPath)
+          console.error('Output file:', outputPath)
+          console.error('Input file exists:', fs.existsSync(inputPath))
+          console.error('Output directory exists:', fs.existsSync(path.dirname(outputPath)))
+          
+          // Check input file details
+          if (fs.existsSync(inputPath)) {
+            const stats = fs.statSync(inputPath)
+            console.error('Input file size:', stats.size, 'bytes')
+            console.error('Input file permissions:', stats.mode)
+          }
+          
+          // Implement fallback strategy - use original file if compression fails
+          console.log('Compression failed, using original file as fallback')
+          try {
+            const fallbackFilename = `fallback_${uuidv4()}.mp4`
+            const fallbackPath = path.join(outputDir, fallbackFilename)
+            fs.copyFileSync(inputPath, fallbackPath)
+            
+            const originalSize = fs.statSync(inputPath).size
+            
+            resolve({
+              path: fallbackPath,
+              originalSize,
+              compressedSize: originalSize,
+              compressionRatio: '1.00',
+              filename: fallbackFilename,
+              fallback: true
+            })
+          } catch (fallbackError) {
+            console.error('Fallback strategy also failed:', fallbackError)
+            reject(new Error(`Both compression and fallback failed. Original error: ${err.message}, Fallback error: ${fallbackError.message}`))
+          }
+        })
+        
+        // Add stderr logging for more detailed error information
+        command.on('stderr', (stderrLine) => {
+          console.error('FFmpeg stderr:', stderrLine)
+        })
+        
+        // Run the command
+        command.run()
+        
       } catch (error) {
-        console.error('FFmpeg not available for compression:', error)
+        console.error('Error setting up video compression:', error)
         reject(error)
       }
     })
