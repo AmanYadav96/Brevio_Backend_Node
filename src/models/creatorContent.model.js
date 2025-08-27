@@ -258,10 +258,8 @@ creatorContentSchema.pre('validate', function(next) {
     this.invalidate('seasons', 'At least one season is required for series')
   }
   
-  // For EDUCATIONAL, at least one lesson is required
-  if (this.contentType === ContentType.EDUCATIONAL && (!this.lessons || this.lessons.length === 0)) {
-    this.invalidate('lessons', 'At least one lesson is required for educational content')
-  }
+  // For EDUCATIONAL, lessons are optional - courses can be created without lessons initially
+  // Lessons can be added later using the addLessonToCourse endpoint
   
   // If pricing model is PAID, price must be greater than 0
   if (this.contentType === ContentType.EDUCATIONAL && 

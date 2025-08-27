@@ -158,15 +158,33 @@ export const getCreatorStats = async (req, res) => {
     }
     
     const creatorId = user._id;
+    const {
+      page,
+      limit,
+      ignoreLimit = false
+    } = req.query;
     
     // Determinar si se debe traducir al español
     const translateToSpanish = shouldTranslateToSpanish(req);
     
-    // Get all content created by this creator
-    const creatorContent = await CreatorContent.find({ creator: creatorId })
+    // Build content query
+    let contentQuery = CreatorContent.find({ creator: creatorId })
       .select('_id title description contentType status views likes createdAt mediaAssets ageRating genre')
       .populate('genre', 'name nameEs')
       .sort({ createdAt: -1 });
+    
+    // Apply pagination only if page and limit are provided and ignoreLimit is false
+    const shouldPaginate = page && limit && !ignoreLimit && ignoreLimit !== 'true';
+    if (shouldPaginate) {
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      contentQuery = contentQuery.skip(skip).limit(parseInt(limit));
+    }
+    
+    // Get content and total count
+    const [creatorContent, totalContent] = await Promise.all([
+      contentQuery,
+      CreatorContent.countDocuments({ creator: creatorId })
+    ]);
     
     // Transformar los datos y aplicar traducciones si es necesario
     const transformedContent = creatorContent.map(content => {
@@ -236,7 +254,8 @@ export const getCreatorStats = async (req, res) => {
     // Calculate total views
     const totalViews = creatorContent.reduce((sum, content) => sum + (content.views || 0), 0);
     
-    return res.json({
+    // Build response object
+    const response = {
       success: true,
       language: translateToSpanish ? 'es' : 'en', // Añadir para depuración
       stats: {
@@ -245,7 +264,21 @@ export const getCreatorStats = async (req, res) => {
         contentCounts
       },
       content: transformedContent
-    });
+    };
+    
+    // Add pagination info if pagination is applied
+    if (shouldPaginate) {
+      response.pagination = {
+        total: totalContent,
+        pages: Math.ceil(totalContent / parseInt(limit)),
+        page: parseInt(page),
+        limit: parseInt(limit)
+      };
+    } else {
+      response.total = totalContent;
+    }
+    
+    return res.json(response);
   } catch (error) {
     console.error('Creator stats error:', error);
     return res.status(error.statusCode || 500).json({ 

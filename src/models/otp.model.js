@@ -42,9 +42,9 @@ const otpSchema = new mongoose.Schema(
   }
 )
 
-// Index for faster lookups and automatic expiry
+// Create indexes for better performance
 otpSchema.index({ email: 1, purpose: 1 })
-otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+// Removed TTL index to avoid casting issues - handle expiration manually
 
 // Static method to generate OTP
 // Static method to generate OTP
@@ -60,23 +60,38 @@ otpSchema.statics.generateOTP = function(email, purpose) {
 
 // Method to verify OTP
 otpSchema.statics.verifyOTP = async function(email, code, purpose) {
-  const otp = await this.findOne({
-    email,
-    purpose,
-    isUsed: false,
-    expiresAt: { $gt: new Date() }
-  })
+  try {
+    const currentDate = new Date();
+    
+    // First find all matching OTPs without date filter (remove .lean() to get Mongoose documents)
+    const otps = await this.find({
+      email: email,
+      purpose: purpose,
+      isUsed: false
+    });
+    
+    // Filter manually to avoid casting issues
+    const validOtps = otps.filter(otp => {
+      const expiresAt = new Date(otp.expiresAt);
+      return expiresAt > currentDate;
+    });
+    
+    if (validOtps.length === 0) {
+      return { valid: false, message: "Invalid or expired OTP" }
+    }
+    
+    const otp = validOtps[0];
 
-  if (!otp) {
-    return { valid: false, message: "Invalid or expired OTP" }
+    // Check if the provided code matches
+    if (otp.code !== code) {
+      return { valid: false, message: "Invalid OTP code" }
+    }
+
+    return { valid: true, otp }
+  } catch (error) {
+    console.error('OTP verification error:', error);
+    return { valid: false, message: "Error verifying OTP" }
   }
-
-  // Check if the provided code matches
-  if (otp.code !== code) {
-    return { valid: false, message: "Invalid OTP code" }
-  }
-
-  return { valid: true, otp }
 }
 
 // Method to mark OTP as used

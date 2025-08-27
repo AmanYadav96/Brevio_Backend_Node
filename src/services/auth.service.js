@@ -328,9 +328,12 @@ export class AuthService {
   }
   async checkIfEmailExistsInFirebase(email) {
     try {
-      const signInMethods = await adminAuth.fetchSignInMethodsForEmail(email);
-      return signInMethods.length > 0;
+      await adminAuth.getUserByEmail(email);
+      return true; // User exists
     } catch (error) {
+      if (error.code === 'auth/user-not-found') {
+        return false; // User doesn't exist
+      }
       console.error("Error checking if email exists in Firebase:", error);
       return false; // Default to false if there's an error
     }

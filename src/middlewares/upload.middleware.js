@@ -572,10 +572,11 @@ export const handleUpload = (type) => {
               // Process video with compression
               const success = await processVideoWithCompression(file, fieldName, uploads, req.user,contentId);
               if (!success) {
-                return res.status(500).json({
-                  success: false,
-                  message: 'Failed to process video file'
-                });
+                // Don't populate uploads object on failure - let controller handle rollback
+                console.log('Video processing failed, uploads object will remain empty for rollback');
+                // Continue processing other files but don't return error immediately
+                // This allows the controller to detect missing video and trigger rollback
+                continue;
               }
             } else {
               try {

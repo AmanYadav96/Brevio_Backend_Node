@@ -935,7 +935,6 @@
  *               - channel
  *               - ageRating
  *               - thumbnail
- *               - pricing
  *             properties:
  *               title:
  *                 type: string
@@ -969,7 +968,7 @@
  *                 description: Year of release
  *               lessons:
  *                 type: string
- *                 description: JSON string of lessons array
+ *                 description: JSON string of lessons array (optional - can be added later)
  *               pricing:
  *                 type: string
  *                 description: JSON string of pricing object

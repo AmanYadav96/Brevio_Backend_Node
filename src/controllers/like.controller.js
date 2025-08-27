@@ -1,5 +1,6 @@
 import Like from '../models/like.model.js'
 import Comment from '../models/comment.model.js'
+import User from '../models/user.model.js'
 import { AppError } from '../utils/app-error.js'
 
 // Toggle like (like or unlike)
@@ -159,6 +160,52 @@ export const getUserLikes = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message
+    })
+  }
+}
+
+// Get users who liked specific content with their emails
+export const getUsersWhoLikedContent = async (req, res) => {
+  try {
+    const { contentId } = req.params
+    const { contentType = 'creatorContent' } = req.query
+    
+    // Validate content type
+    if (!['content', 'creatorContent', 'comment'].includes(contentType)) {
+      throw new AppError('Invalid content type', 400)
+    }
+    
+    // Get all likes for this content and populate user data
+    const likes = await Like.find({
+      contentType,
+      contentId
+    }).populate('user', 'name email username createdAt')
+    
+    // Extract user information with emails
+    const usersWhoLiked = likes.map(like => ({
+      userId: like.user._id,
+      name: like.user.name,
+      email: like.user.email,
+      username: like.user.username,
+      likedAt: like.createdAt,
+      userCreatedAt: like.user.createdAt
+    }))
+    
+    // Get total count
+    const totalLikes = likes.length
+    
+    return res.json({
+      success: true,
+      contentId,
+      contentType,
+      totalLikes,
+      users: usersWhoLiked
+    })
+  } catch (error) {
+    console.error('Get users who liked content error:', error)
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Failed to get users who liked content'
     })
   }
 }

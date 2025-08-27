@@ -503,18 +503,18 @@ export const getContentById = async (req, res) => {
 export const getAllContent = async (req, res) => {
   try {
     const {
-      page = 1,
-      limit = 10,
-      contentType,
-      orientation,
-      status,
-      creatorId,
-      genre,
-      search,
-      sort = 'createdAt',
-      order = 'desc',
-      ignoreLimit = true // Add this parameter to bypass pagination
-    } = req.query;
+    page,
+    limit,
+    contentType,
+    orientation,
+    status,
+    creatorId,
+    genre,
+    search,
+    sort = 'createdAt',
+    order = 'desc',
+    ignoreLimit = false
+  } = req.query;
     
     const query = {};
     
@@ -567,8 +567,9 @@ export const getAllContent = async (req, res) => {
       .sort(sortOptions)
       .lean();
     
-    // Apply pagination only if ignoreLimit is false
-    if (!ignoreLimit && ignoreLimit !== 'true') {
+    // Apply pagination only if page and limit are provided and ignoreLimit is false
+    const shouldPaginate = page && limit && !ignoreLimit && ignoreLimit !== 'true';
+    if (shouldPaginate) {
       const skip = (parseInt(page) - 1) * parseInt(limit);
       contentQuery = contentQuery.skip(skip).limit(parseInt(limit));
     }
@@ -586,6 +587,7 @@ export const getAllContent = async (req, res) => {
     const contentWithLikesAndSaves = await Promise.all(
       transformedContent.map(async (contentItem) => {
         // Get likes count for this content
+          
         const likesCount = await Like.countDocuments({
           contentType: 'creatorContent',
           contentId: contentItem._id
@@ -614,13 +616,15 @@ export const getAllContent = async (req, res) => {
           });
           userLiked = !!likeRecord;
         }
-        
+ 
+
         return {
           ...contentItem,
           likesCount,
           userSaved,
           savedFolder,
-          userLiked
+          userLiked,
+         
         };
       })
     );
@@ -634,8 +638,9 @@ export const getAllContent = async (req, res) => {
       content: shuffledContent
     };
     
-    // Add pagination info only if limits are not ignored
-    if (!ignoreLimit && ignoreLimit !== 'true') {
+    
+    // Add pagination info only if pagination is applied
+    if (shouldPaginate) {
       response.pagination = {
         total,
         pages: Math.ceil(total / parseInt(limit)),
@@ -643,7 +648,7 @@ export const getAllContent = async (req, res) => {
         limit: parseInt(limit)
       };
     } else {
-      response.total = total;
+      response.total = total
     }
     
     return res.json(response);
@@ -791,6 +796,8 @@ export const createContentBasic = async (req, res) => {
 
 // Step 2: Upload main video
 export const uploadMainVideo = async (req, res) => {
+  let contentToRollback = null;
+  
   try {
     const uploads = req.uploads || {}  
     const body = req.body;
@@ -812,6 +819,9 @@ export const uploadMainVideo = async (req, res) => {
       });
     }
     
+    // Store content reference for potential rollback
+    contentToRollback = content;
+    
     // Check if user is creator or admin
     if (!content.creator.equals(user._id) && user.role !== UserRole.ADMIN) {
       return res.status(403).json({
@@ -820,8 +830,20 @@ export const uploadMainVideo = async (req, res) => {
       });
     }
     
-    // Ensure we have a video file
+    // Check if video upload failed (uploads object will be empty or missing videoFile)
     if (!uploads.videoFile) {
+      // If this is a draft content without video URL, it means video upload failed
+      // Delete the content to rollback the basic data creation
+      if (content.status === 'draft' && !content.videoUrl) {
+        console.log('Video upload failed, rolling back content creation:', contentId);
+        await CreatorContent.findByIdAndDelete(contentId);
+        
+        return res.status(500).json({
+          success: false,
+          message: "Video upload failed. Content has been removed. Please try creating the content again."
+        });
+      }
+      
       return res.status(400).json({
         success: false,
         message: "No video file provided"
@@ -868,6 +890,26 @@ export const uploadMainVideo = async (req, res) => {
     });
   } catch (error) {
     console.error("Upload main video error:", error);
+    
+    // Rollback: Delete content if it was created as draft and video upload failed
+    if (contentToRollback && contentToRollback.status === 'draft' && !contentToRollback.videoUrl) {
+      try {
+        console.log('Rolling back content creation due to error:', contentToRollback._id);
+        await CreatorContent.findByIdAndDelete(contentToRollback._id);
+        
+        return res.status(500).json({
+          success: false,
+          message: "Video upload failed. Content has been removed. Please try creating the content again."
+        });
+      } catch (rollbackError) {
+        console.error('Error during rollback:', rollbackError);
+        return res.status(500).json({
+          success: false,
+          message: "Video upload failed and rollback failed. Please contact support."
+        });
+      }
+    }
+    
     return res.status(500).json({
       success: false,
       message: error.message
@@ -1517,24 +1559,27 @@ export const createCourse = async (req, res) => {
       })
     }
     
-    // Validate lessons data
-    if (!lessons || !Array.isArray(lessons) || lessons.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'At least one lesson is required for courses'
-      })
+    // Lessons are optional - courses can be created without lessons initially
+    // Validate lessons data if provided
+    let parsedLessons = []
+    if (lessons && lessons.length > 0) {
+      try {
+        parsedLessons = typeof lessons === 'string' ? JSON.parse(lessons) : lessons
+        if (!Array.isArray(parsedLessons)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Lessons must be an array'
+          })
+        }
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid lessons data format'
+        })
+      }
     }
     
-    // Parse lessons if they come as string
-    let parsedLessons
-    try {
-      parsedLessons = typeof lessons === 'string' ? JSON.parse(lessons) : lessons
-    } catch (error) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid lessons data format'
-      })
-    }
+    // parsedLessons is already handled above
     
     // Parse pricing if provided
     let parsedPricing = {
