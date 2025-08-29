@@ -148,7 +148,7 @@ export const facebookLogin = async (req, res) => {
 export const becomeCreator = async (req, res) => {
   try {
     const userId = req.user._id
-    const { username } = req.body
+    const { username, bio } = req.body
 
     // Get client IP address
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -161,25 +161,23 @@ export const becomeCreator = async (req, res) => {
       });
     }
 
-    // Validate username
-    if (!username) {
-      return res.status(400).json({
-        success: false,
-        message: "Username is required to become a creator"
+    // Username and bio are optional - sanitize if provided
+    let sanitizedUsername = null;
+    if (username && username.trim()) {
+      sanitizedUsername = username.trim();
+      
+      // Check if username is already taken by another user
+      const existingUsername = await User.findOne({ 
+        username: sanitizedUsername
       })
-    }
-
-    // Check if username is already taken
-    const existingUsername = await User.findOne({ 
-      username, 
-      _id: { $ne: userId } // Exclude current user
-    })
-    
-    if (existingUsername) {
-      return res.status(400).json({
-        success: false,
-        message: "Username is already taken"
-      })
+      
+      // If username exists and it's not the current user, it's taken
+       if (existingUsername && existingUsername._id.toString() !== userId.toString()) {
+         return res.status(400).json({
+           success: false,
+           message: "Username is already taken"
+         })
+       }
     }
 
     // Find user
@@ -188,8 +186,13 @@ export const becomeCreator = async (req, res) => {
       throw new AppError("User not found", 404)
     }
 
-    // Update user role to creator and set username
-    user.username = username
+    // Update user role to creator and set optional fields
+    if (sanitizedUsername) {
+      user.username = sanitizedUsername;
+    }
+    if (bio !== undefined) {
+      user.bio = bio || ''; // Allow empty string for bio
+    }
     user.role = UserRole.CREATOR
     await user.save()
 
@@ -201,7 +204,8 @@ export const becomeCreator = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        username: user.username,
+        username: user.username || null,
+        bio: user.bio || null,
         profilePicture: user.profilePicture,
       },
     })

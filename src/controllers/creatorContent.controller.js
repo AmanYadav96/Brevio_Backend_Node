@@ -10,9 +10,10 @@ import { translateContentStatus } from '../utils/statusTranslation.js'
 // Importar la función getBlockedUserIds
 import { getBlockedUserIds } from '../controllers/userBlock.controller.js'
 import { shouldTranslateToSpanish } from '../utils/languageHandler.js';
-// Import Like and Save models for likes count and saved status
+// Import Like, Save and Comment models for likes count, saved status and comments count
 import Like from '../models/like.model.js'
 import Save from '../models/save.model.js'
+import Comment from '../models/comment.model.js'
 
 
 // Create new content
@@ -448,6 +449,13 @@ export const getContentById = async (req, res) => {
       contentId: contentId
     });
     
+    // Get comments count for this content
+    const commentsCount = await Comment.countDocuments({
+      contentType: 'creatorContent',
+      contentId: contentId,
+      status: 'active'
+    });
+    
     // Check if user has saved this content (only if user is authenticated)
     let userSaved = false;
     let savedFolder = null;
@@ -472,10 +480,11 @@ export const getContentById = async (req, res) => {
       userLiked = !!likeRecord;
     }
     
-    // Add likes and saved info to content
+    // Add likes, comments and saved info to content
     const contentWithLikesAndSaves = {
       ...transformedContent,
       likesCount,
+      commentsCount,
       userSaved,
       savedFolder,
       userLiked
@@ -593,6 +602,13 @@ export const getAllContent = async (req, res) => {
           contentId: contentItem._id
         });
         
+        // Get comments count for this content
+        const commentsCount = await Comment.countDocuments({
+          contentType: 'creatorContent',
+          contentId: contentItem._id,
+          status: 'active'
+        });
+        
         // Check if user has saved this content (only if user is authenticated)
         let userSaved = false;
         let savedFolder = null;
@@ -621,6 +637,7 @@ export const getAllContent = async (req, res) => {
         return {
           ...contentItem,
           likesCount,
+          commentsCount,
           userSaved,
           savedFolder,
           userLiked,
