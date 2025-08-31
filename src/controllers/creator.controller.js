@@ -421,6 +421,177 @@ export const getCreatorProfileById = async (req, res) => {
  * @param {Object} res - Response
  * @returns {Object} List of creators matching search criteria
  */
+/**
+ * Get creator's own profile data (authenticated creator)
+ * @param {Object} req - Request
+ * @param {Object} res - Response
+ * @returns {Object} Creator's own profile data with comprehensive stats
+ */
+export const getCreatorOwnProfile = async (req, res) => {
+  try {
+    const user = req.user;
+    
+    // Check if user is a creator
+    if (user.role !== UserRole.CREATOR) {
+      throw new AppError('Unauthorized access. Only creators can access this endpoint.', 403);
+    }
+    
+    const creatorId = user._id;
+    
+    // Check if translation to Spanish is needed
+    const translateToSpanish = shouldTranslateToSpanish(req);
+    
+    // Get creator basic info
+    const creator = await User.findById(creatorId)
+      .select('_id name username bio email profilePicture socialProfiles createdAt status subscriptionStatus')
+      .lean();
+    
+    if (!creator) {
+      throw new AppError('Creator not found', 404);
+    }
+    
+    // Find creator's channel
+    const channel = await Channel.findOne({
+      'owner.email': creator.email
+    }).select('_id name description thumbnail type createdAt').lean();
+    
+    // Get comprehensive statistics in parallel
+    const [
+      totalContent,
+      publishedContent,
+      pendingContent,
+      rejectedContent,
+      totalShortFilms,
+      totalEducationalContent,
+      totalSeries,
+      subscribers,
+      totalLikes,
+      totalViews,
+      totalDonations,
+      recentContent
+    ] = await Promise.all([
+      CreatorContent.countDocuments({ creator: creatorId }),
+      CreatorContent.countDocuments({ creator: creatorId, status: 'published' }),
+      CreatorContent.countDocuments({ creator: creatorId, status: 'processing' }),
+      CreatorContent.countDocuments({ creator: creatorId, status: 'rejected' }),
+      CreatorContent.countDocuments({ creator: creatorId, contentType: ContentType.SHORT_FILM }),
+      CreatorContent.countDocuments({ creator: creatorId, contentType: ContentType.EDUCATIONAL }),
+      CreatorContent.countDocuments({ creator: creatorId, contentType: ContentType.SERIES }),
+      
+      // Channel subscribers
+      channel ? ChannelSubscription.countDocuments({
+        channel: channel._id,
+        isActive: true
+      }) : 0,
+      
+      // Total likes across all content
+      CreatorContent.aggregate([
+        { $match: { creator: new mongoose.Types.ObjectId(creatorId) } },
+        { $group: { _id: null, totalLikes: { $sum: "$likes" } } }
+      ]),
+      
+      // Total views across all content
+      CreatorContent.aggregate([
+        { $match: { creator: new mongoose.Types.ObjectId(creatorId) } },
+        { $group: { _id: null, totalViews: { $sum: "$views" } } }
+      ]),
+      
+      // Total donations received
+      Donation.aggregate([
+        { $match: { creator: new mongoose.Types.ObjectId(creatorId) } },
+        { $group: { _id: null, totalAmount: { $sum: "$amount" }, totalCount: { $sum: 1 } } }
+      ]),
+      
+      // Recent content (last 5 items)
+      CreatorContent.find({ creator: creatorId })
+        .select('_id title contentType status mediaAssets.thumbnail views likes createdAt')
+        .populate('genre', 'name nameEs')
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean()
+    ]);
+    
+    // Format recent content
+    const formattedRecentContent = recentContent.map(item => ({
+      id: item._id,
+      title: item.title,
+      contentType: translateToSpanish ? translateContentType(item.contentType) : item.contentType,
+      status: translateToSpanish ? translateContentStatus(item.status) : item.status,
+      thumbnail: item.mediaAssets?.thumbnail || '',
+      views: item.views || 0,
+      likes: item.likes || 0,
+      createdAt: item.createdAt,
+      genre: item.genre || null
+    }));
+    
+    // Prepare response data
+    const profileData = {
+      id: creator._id,
+      name: creator.name,
+      username: creator.username,
+      bio: creator.bio,
+      email: creator.email,
+      profilePicture: creator.profilePicture,
+      socialProfiles: creator.socialProfiles || {},
+      joinedDate: creator.createdAt,
+      status: creator.status,
+      subscriptionStatus: creator.subscriptionStatus,
+      
+      // Channel information
+      channel: channel ? {
+        id: channel._id,
+        name: channel.name,
+        description: channel.description,
+        thumbnail: channel.thumbnail,
+        type: channel.type,
+        createdAt: channel.createdAt
+      } : null,
+      
+      // Comprehensive statistics
+      stats: {
+        content: {
+          total: totalContent,
+          published: publishedContent,
+          pending: pendingContent,
+          rejected: rejectedContent,
+          byType: {
+            shortFilms: totalShortFilms,
+            educational: totalEducationalContent,
+            series: totalSeries
+          }
+        },
+        engagement: {
+          subscribers: subscribers,
+          totalLikes: totalLikes.length > 0 ? totalLikes[0].totalLikes : 0,
+          totalViews: totalViews.length > 0 ? totalViews[0].totalViews : 0
+        },
+        monetization: {
+          totalDonations: totalDonations.length > 0 ? totalDonations[0].totalAmount : 0,
+          donationCount: totalDonations.length > 0 ? totalDonations[0].totalCount : 0
+        }
+      },
+      
+      // Recent content
+      recentContent: formattedRecentContent
+    };
+    
+    // Transform URLs in the response
+    const transformedProfile = transformAllUrls(profileData);
+    
+    return res.json({
+      success: true,
+      profile: transformedProfile
+    });
+    
+  } catch (error) {
+    console.error('Get creator own profile error:', error);
+    return res.status(error.statusCode || 500).json({ 
+      success: false, 
+      message: error.message || 'Failed to fetch creator profile' 
+    });
+  }
+};
+
 export const searchCreators = async (req, res) => {
   try {
     const {

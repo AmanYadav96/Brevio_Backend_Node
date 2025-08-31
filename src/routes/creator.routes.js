@@ -4,6 +4,7 @@ import {
   getCreatorDashboard, 
   getCreatorStats,
   getCreatorProfileById,
+  getCreatorOwnProfile,
   searchCreators 
 } from "../controllers/creator.controller.js"
 
@@ -21,5 +22,8 @@ router.get("/dashboard", getCreatorDashboard)
 
 // Get creator statistics and content data
 router.get("/stats", getCreatorStats)
+
+// Get creator's own profile data (authenticated creator)
+router.get("/profile", getCreatorOwnProfile)
 
 export default router

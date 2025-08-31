@@ -50,6 +50,7 @@ import commentRoutes from './src/routes/comment.routes.js'
 import saveRoutes from './src/routes/save.routes.js'
 import passwordRoutes from './src/routes/password.routes.js'
 import UserBlock from './src/routes/userBlock.routes.js';
+import searchRoutes from './src/routes/search.routes.js';
 
 // Add these lines where you register other routes
 
@@ -144,6 +145,7 @@ app.use("/api/passwords",passwordRoutes)
 app.use('/api/likes', likeRoutes)
 app.use('/api/comments', commentRoutes)
 app.use('/api/saves', saveRoutes)
+app.use('/api/search', searchRoutes)
 // Health check route
 app.get("/", (req, res) => res.json({ status: "Server is running" }));
 
