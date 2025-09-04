@@ -9,9 +9,12 @@ import VideoView from "../models/videoView.model.js"
 import Donation from "../models/donation.model.js"
 import Report from "../models/report.model.js"
 import EmailService from "../services/email.service.js"
-// Add this import at the top of the file
 import { isIpFromSpain } from "../utils/geolocation.js"
 import cacheService from "../services/cache.service.js"
+import CreatorContent from "../models/creatorContent.model.js"
+import Content from "../models/content.model.js"
+import Channel from "../models/channel.model.js"
+import { transformAllUrls } from "../utils/cloudStorage.js"
 
 // Get all users (for admin)
 export const getAllUsers = async (req, res) => {
@@ -201,6 +204,134 @@ export const getUserProfile = async (req, res) => {
       return res.status(error.statusCode).json({ success: false, message: error.message })
     }
     return res.status(500).json({ success: false, message: "Failed to fetch profile" })
+  }
+}
+
+// Get comprehensive user profile with all details
+export const getComprehensiveProfile = async (req, res) => {
+  try {
+    const userId = req.user._id // Get the authenticated user's ID
+    
+    // Get user profile
+    const user = await User.findById(userId).select('-password').lean()
+    if (!user) {
+      throw new AppError("User not found", 404)
+    }
+
+    // Initialize response object
+    const profileData = {
+      success: true,
+      user: transformAllUrls(user),
+      content: [],
+      creatorContent: [],
+      channel: null,
+      stats: {
+        totalContent: 0,
+        totalCreatorContent: 0,
+        publishedContent: 0,
+        draftContent: 0,
+        totalViews: 0,
+        totalLikes: 0,
+        totalComments: 0,
+        totalSaves: 0,
+        channelSubscribers: 0
+      },
+      activity: {
+        likedContent: [],
+        savedContent: [],
+        comments: [],
+        subscriptions: []
+      }
+    }
+
+    // Get user's regular content
+    const content = await Content.find({ creator: userId })
+      .sort({ createdAt: -1 })
+      .lean()
+
+    profileData.content = content.map(item => transformAllUrls(item))
+    profileData.stats.totalContent = content.length
+
+    // If user is a creator, get their creator content and channel
+    if (user.role === UserRole.CREATOR) {
+      // Get creator's channel
+      const channel = await Channel.findOne({
+        'owner.email': user.email
+      }).select('_id name description thumbnail type createdAt subscribers').lean()
+      
+      if (channel) {
+        profileData.channel = transformAllUrls(channel)
+        profileData.stats.channelSubscribers = channel.subscribers || 0
+      }
+
+      // Get creator's content
+      const creatorContent = await CreatorContent.find({ creator: userId })
+        .sort({ createdAt: -1 })
+        .lean()
+
+      // Transform URLs and calculate stats
+      profileData.creatorContent = creatorContent.map(item => transformAllUrls(item))
+      profileData.stats.totalCreatorContent = creatorContent.length
+      profileData.stats.publishedContent = creatorContent.filter(c => c.status === 'published').length
+      profileData.stats.draftContent = creatorContent.filter(c => c.status === 'draft').length
+      profileData.stats.totalViews = creatorContent.reduce((sum, c) => sum + (c.views || 0), 0)
+      profileData.stats.totalLikes = creatorContent.reduce((sum, c) => sum + (c.likes || 0), 0)
+
+      // Get total comments on creator's content
+      const contentIds = creatorContent.map(c => c._id)
+      if (contentIds.length > 0) {
+        const totalComments = await Comment.countDocuments({
+          contentType: 'CreatorContent',
+          contentId: { $in: contentIds },
+          status: 'active'
+        })
+        profileData.stats.totalComments = totalComments
+      }
+    }
+
+    // Get user's activity (for all users)
+    const [likedContent, savedContent, userComments, subscriptions] = await Promise.all([
+      // Liked content
+      Like.find({ user: userId })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean(),
+      
+      // Saved content
+      Save.find({ user: userId })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean(),
+      
+      // User's comments
+      Comment.find({ user: userId, status: 'active' })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean(),
+      
+      // Channel subscriptions
+      ChannelSubscription.find({ subscriber: userId })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean()
+    ])
+
+    // Transform and assign activity data
+    profileData.activity.likedContent = likedContent.map(item => transformAllUrls(item))
+    profileData.activity.savedContent = savedContent.map(item => transformAllUrls(item))
+    profileData.activity.comments = userComments.map(item => transformAllUrls(item))
+    profileData.activity.subscriptions = subscriptions.map(item => transformAllUrls(item))
+
+    // Update activity stats
+    profileData.stats.totalSaves = savedContent.length
+
+    return res.json(profileData)
+  } catch (error) {
+    console.error('Get comprehensive profile error:', error)
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message })
+    }
+    return res.status(500).json({ success: false, message: "Failed to fetch comprehensive profile" })
   }
 }
 

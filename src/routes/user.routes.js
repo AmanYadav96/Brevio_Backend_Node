@@ -7,7 +7,7 @@ import {
   getUserStats,
   updateUserProfile,
   getUserProfile,
-  getEnhancedProfile,
+  getComprehensiveProfile,
   deleteUserAccount // Add this import
 } from '../controllers/user.controller.js'
 import { protect, restrictTo } from '../middlewares/auth.middleware.js'
@@ -23,7 +23,7 @@ router.use(protect)
 
 // User profile routes (for regular users) - no caching for live data
 router.get('/profile', getUserProfile) // No cache - shows live data immediately
-router.get('/profile/enhanced/:userId?', getEnhancedProfile) // Enhanced profile with stats
+router.get('/profile/comprehensive', getComprehensiveProfile) // Comprehensive profile with all details
 router.patch('/profile', optionalUpload, updateUserProfile)
 router.delete('/account', realTimeDataMiddleware(), deleteUserAccount) // No cache for account deletion
 
