@@ -327,10 +327,11 @@ export const getCreatorProfileById = async (req, res) => {
       'owner.email': creator.email
     }).select('_id name thumbnail type').lean();
     
-    // Get content IDs first (more efficient)
+    // Get content IDs first (more efficient) - only published and admin approved
     const contentIds = await CreatorContent.find({ 
       creator: targetId,
-      status: 'published'
+      status: 'published',
+      adminApproved: true
     }).select('_id').lean();
     
     const idArray = contentIds.map(item => item._id);
@@ -339,7 +340,8 @@ export const getCreatorProfileById = async (req, res) => {
     const [content, totalContent, subscribers, totalLikes, totalViews] = await Promise.all([
       CreatorContent.find({ 
         creator: targetId,
-        status: 'published'
+        status: 'published',
+        adminApproved: true
       })
         .select('_id title contentType mediaAssets.thumbnail views likes createdAt ageRating genre')
         .populate('genre', 'name nameEs')
