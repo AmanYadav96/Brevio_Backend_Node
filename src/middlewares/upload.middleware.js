@@ -224,15 +224,19 @@ async function processVideoWithCompression(file, fieldName, uploads, user, conte
     const compressionResult = await videoProcessorService.compressVideo(
       file.path, 
       tempDir,
-      (compressionProgress) => {
+      async (compressionProgress) => {
         // Compression progress (0-50% of total)
         const totalProgress = Math.round(compressionProgress * 0.5);
         
         // Update database
-        FileUpload.findByIdAndUpdate(fileUpload._id, { 
-          progress: totalProgress,
-          status: 'compressing'
-        }).catch(err => console.error('Error updating compression progress:', err));
+        try {
+          await FileUpload.findByIdAndUpdate(fileUpload._id, { 
+            progress: totalProgress,
+            status: 'compressing'
+          });
+        } catch (err) {
+          console.error('Error updating compression progress:', err);
+        }
         
         // Emit progress with compression details
         socketService.emitUploadStatus(user.id, fileUpload._id, 'compressing', totalProgress, {
@@ -280,14 +284,18 @@ async function processVideoWithCompression(file, fieldName, uploads, user, conte
       'videos',
       user.id,
       fileUpload._id,
-      (uploadProgress) => {
+      async (uploadProgress) => {
         // Upload progress (50-100% of total)
         const totalProgress = Math.round(50 + (uploadProgress * 0.5));
         
         // Update database
-        FileUpload.findByIdAndUpdate(fileUpload._id, { 
-          progress: totalProgress 
-        }).catch(err => console.error('Error updating upload progress:', err));
+        try {
+          await FileUpload.findByIdAndUpdate(fileUpload._id, { 
+            progress: totalProgress 
+          });
+        } catch (err) {
+          console.error('Error updating upload progress:', err);
+        }
         
         // Emit progress with upload details
         socketService.emitUploadStatus(user.id, fileUpload._id, 'uploading', totalProgress, {
@@ -431,7 +439,7 @@ export const uploadTypes = {
   },
   USER: {
     folder: 'users',
-    fields: ['profilePicture']
+    fields: ['profilePicture', 'avatar', 'coverPhoto']
   }
 }
 
@@ -1365,7 +1373,9 @@ export const getMultipleUploadProgress = async (req, res) => {
 export const optionalUpload = (req, res, next) => {
   // Configure multer for optional uploads
   const optionalMulterUpload = upload.fields([
-    { name: 'profilePicture', maxCount: 1 }
+    { name: 'profilePicture', maxCount: 1 },
+    { name: 'avatar', maxCount: 1 },
+    { name: 'coverPhoto', maxCount: 1 }
   ]);
   
   optionalMulterUpload(req, res, async (err) => {

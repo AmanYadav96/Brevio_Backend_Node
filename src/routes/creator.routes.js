@@ -12,6 +12,7 @@ const router = express.Router()
 
 // Public routes - no authentication required
 router.get("/profile/:creatorId", getCreatorProfileById)
+router.get("/comprehensive/:userId", getCreatorProfileById)
 router.get("/search", searchCreators)
 
 // All routes below require authentication

@@ -179,8 +179,8 @@ class SocketService {
       });
   }
 
-  // Emit upload completion to specific user
-  emitUploadComplete(userId, fileId, url) {
+  // Legacy method for backward compatibility
+  emitUploadCompleteSimple(userId, fileId, url) {
     if (!this.io) return;
     
     const session = this.uploadSessions.get(fileId);

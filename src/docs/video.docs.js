@@ -362,6 +362,241 @@
  *       403:
  *         description: Not channel owner
  *       500:
+         description: Server error
+ */
+
+/**
+ * @swagger
+ * /api/videos/basic:
+ *   post:
+ *     summary: Create basic video information (draft)
+ *     tags: [Videos]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title, description, contentType, ageRating, genreId]
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 description: Video title
+ *               description:
+ *                 type: string
+ *                 description: Video description
+ *               contentType:
+ *                 type: string
+ *                 enum: [TV Series, Movie, Documentary, Short Film, Web Series, Music Video, Other]
+ *                 description: Type of video content
+ *               ageRating:
+ *                 type: string
+ *                 enum: [All Ages, 13+, 16+, 18+]
+ *                 description: Age rating for the video content
+ *               genreId:
+ *                 type: string
+ *                 description: Genre ID for the video
+ *               cast:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [name, roleType]
+ *                   properties:
+ *                     photo:
+ *                       type: string
+ *                       description: Cast member photo URL
+ *                     name:
+ *                       type: string
+ *                       description: Cast member name
+ *                     roleType:
+ *                       type: string
+ *                       enum: [Actor, Actress, Voice, Narrator, Host, Other]
+ *                       description: Type of role in the production
+ *               crew:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [name, roleType]
+ *                   properties:
+ *                     photo:
+ *                       type: string
+ *                       description: Crew member photo URL
+ *                     name:
+ *                       type: string
+ *                       description: Crew member name
+ *                     roleType:
+ *                       type: string
+ *                       enum: [Director, Producer, Writer, Cinematographer, Editor, Music Director, Sound Designer, Other]
+ *                       description: Type of role in the production
+ *     responses:
+ *       201:
+ *         description: Video draft created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 video:
+ *                   $ref: '#/components/schemas/Video'
+ *       400:
+ *         description: Invalid input data
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Not a channel owner
+ *       404:
+ *         description: Genre not found
+ *       500:
+ *         description: Server error
+ *
+ * /api/videos/{videoId}/upload-video:
+ *   post:
+ *     summary: Upload main video file
+ *     tags: [Videos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: videoId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Video ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [video]
+ *             properties:
+ *               video:
+ *                 type: string
+ *                 format: binary
+ *                 description: Main video file
+ *     responses:
+ *       200:
+ *         description: Video uploaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 video:
+ *                   $ref: '#/components/schemas/Video'
+ *                 uploadProgress:
+ *                   type: object
+ *                   properties:
+ *                     percentage:
+ *                       type: number
+ *                       description: Upload progress percentage
+ *                     status:
+ *                       type: string
+ *                       enum: [uploading, processing, completed]
+ *                       description: Upload status
+ *       400:
+ *         description: Invalid input or video file
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Not video owner
+ *       404:
+ *         description: Video not found
+ *       500:
+ *         description: Server error
+ *
+ * /api/videos/{videoId}/upload-media-assets:
+ *   post:
+ *     summary: Upload media assets (banners and trailer)
+ *     tags: [Videos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: videoId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Video ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               verticalBanner:
+ *                 type: string
+ *                 format: binary
+ *                 description: Vertical banner image file
+ *               horizontalBanner:
+ *                 type: string
+ *                 format: binary
+ *                 description: Horizontal banner image file
+ *               trailer:
+ *                 type: string
+ *                 format: binary
+ *                 description: Trailer video file
+ *     responses:
+ *       200:
+ *         description: Media assets uploaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 video:
+ *                   $ref: '#/components/schemas/Video'
+ *                 uploadProgress:
+ *                   type: object
+ *                   properties:
+ *                     verticalBanner:
+ *                       type: object
+ *                       properties:
+ *                         percentage:
+ *                           type: number
+ *                         status:
+ *                           type: string
+ *                           enum: [uploading, completed, failed]
+ *                     horizontalBanner:
+ *                       type: object
+ *                       properties:
+ *                         percentage:
+ *                           type: number
+ *                         status:
+ *                           type: string
+ *                           enum: [uploading, completed, failed]
+ *                     trailer:
+ *                       type: object
+ *                       properties:
+ *                         percentage:
+ *                           type: number
+ *                         status:
+ *                           type: string
+ *                           enum: [uploading, processing, completed, failed]
+ *       400:
+ *         description: Invalid input or media files
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Not video owner
+ *       404:
+ *         description: Video not found
+ *       500:
  *         description: Server error
  */
 

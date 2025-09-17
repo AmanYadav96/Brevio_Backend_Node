@@ -35,13 +35,14 @@ export const createVideo = async (req, res) => {
       })
     }
 
-    // Check if channel exists and user owns it
+    // Check if channel exists and user owns it (or is admin)
     const channel = await Channel.findById(channelId)
     if (!channel) {
       return res.status(404).json({ success: false, message: "Channel not found" })
     }
 
-    if (channel.owner.toString() !== userId.toString()) {
+    // Allow admin users to upload to any channel
+    if (channel.owner.toString() !== userId.toString() && req.user.role !== 'admin') {
       return res.status(403).json({ 
         success: false, 
         message: "You can only upload videos to your own channel" 
@@ -402,8 +403,8 @@ export const updateVideo = async (req, res) => {
       return res.status(404).json({ success: false, message: "Video not found" })
     }
 
-    // Check if user owns the channel
-    if (video.channel.owner.toString() !== userId.toString()) {
+    // Check if user owns the channel (or is admin)
+    if (video.channel.owner.toString() !== userId.toString() && req.user.role !== 'admin') {
       return res.status(403).json({ 
         success: false, 
         message: "You are not authorized to update this video" 
@@ -513,8 +514,8 @@ export const deleteVideo = async (req, res) => {
       return res.status(404).json({ success: false, message: "Video not found" })
     }
 
-    // Check if user owns the channel
-    if (video.channel.owner.toString() !== userId.toString()) {
+    // Check if user owns the channel (or is admin)
+    if (video.channel.owner.toString() !== userId.toString() && req.user.role !== 'admin') {
       return res.status(403).json({ 
         success: false, 
         message: "You are not authorized to delete this video" 
@@ -644,8 +645,8 @@ export const getVideoStats = async (req, res) => {
       return res.status(404).json({ success: false, message: "Video not found" })
     }
 
-    // Check if user owns the channel
-    if (video.channel.owner.toString() !== userId.toString()) {
+    // Check if user owns the channel (or is admin)
+    if (video.channel.owner.toString() !== userId.toString() && req.user.role !== 'admin') {
       return res.status(403).json({ 
         success: false, 
         message: "You are not authorized to view these statistics" 
@@ -710,8 +711,8 @@ export const toggleVideoStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: "Video not found" })
     }
 
-    // Check if user owns the channel
-    if (video.channel.owner.toString() !== userId.toString()) {
+    // Check if user owns the channel (or is admin)
+    if (video.channel.owner.toString() !== userId.toString() && req.user.role !== 'admin') {
       return res.status(403).json({ 
         success: false, 
         message: "You are not authorized to modify this video" 
@@ -847,5 +848,252 @@ export const searchVideos = async (req, res) => {
   } catch (error) {
     console.error("Search videos error:", error)
     return res.status(500).json({ success: false, message: "Failed to search videos" })
+  }
+}
+
+// Step 1: Create video with basic information
+export const createVideoBasic = async (req, res) => {
+  try {
+    const userId = req.user._id
+    const { 
+      title, 
+      description, 
+      contentType, 
+      channelId, 
+      ageRating, 
+      genreId, 
+      cast, 
+      crew 
+    } = req.body
+
+    // Validate required fields
+    if (!title || !description || !contentType || !channelId || !ageRating || !genreId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Title, description, content type, channel, age rating, and genre are required" 
+      })
+    }
+
+    // Check if channel exists and user owns it (or is admin)
+    const channel = await Channel.findById(channelId)
+    if (!channel) {
+      return res.status(404).json({ success: false, message: "Channel not found" })
+    }
+
+    // Allow admin users to upload to any channel
+    if (channel.owner.toString() !== userId.toString() && req.user.role !== 'admin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: "You can only upload videos to your own channel" 
+      })
+    }
+
+    // Check if genre exists
+    const genre = await Genre.findById(genreId)
+    if (!genre) {
+      return res.status(404).json({ success: false, message: "Genre not found" })
+    }
+
+    // Create video with basic information
+    const videoData = {
+      title,
+      description,
+      contentType,
+      thumbnail: '', // Will be uploaded later
+      videoUrl: '', // Will be uploaded later
+      duration: 0,
+      channel: channelId,
+      ageRating,
+      genre: genreId,
+      cast: cast || [],
+      crew: crew || [],
+      mediaAssets: {
+        verticalBanner: '',
+        horizontalBanner: '',
+        trailer: ''
+      },
+      status: 'processing' // Start as processing until video is uploaded
+    }
+
+    const video = await Video.create(videoData)
+    await video.populate('channel genre')
+
+    return res.status(201).json({
+      success: true,
+      video,
+      message: "Video draft created successfully. Please upload video file and media assets."
+    })
+  } catch (error) {
+    console.error("Create basic video error:", error)
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    })
+  }
+}
+
+// Step 2: Upload main video file
+export const uploadMainVideo = async (req, res) => {
+  let videoToRollback = null
+  
+  try {
+    const uploads = req.uploads || {}
+    const body = req.body
+    const user = req.user
+    const fileUploads = req.fileUploads || []
+    const { videoId } = req.params
+    
+    console.log('Uploads object:', uploads)
+    console.log('Body object:', body)
+    
+    // Find video and verify ownership
+    const video = await Video.findById(videoId).populate('channel')
+    
+    if (!video) {
+      return res.status(404).json({
+        success: false,
+        message: "Video not found"
+      })
+    }
+    
+    // Store video reference for potential rollback
+    videoToRollback = video
+    
+    // Check if user owns the channel (or is admin)
+    if (video.channel.owner.toString() !== user._id.toString() && user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: "You don't have permission to modify this video"
+      })
+    }
+    
+    // Check if video upload failed (uploads object will be empty or missing videoFile)
+    if (!uploads.videoFile) {
+      // If this is a video without videoUrl, it means video upload failed
+      // Delete the video to rollback the basic data creation
+      if (video.status === 'processing' && !video.videoUrl) {
+        console.log('Video upload failed, rolling back video creation:', videoId)
+        await Video.findByIdAndDelete(videoId)
+        
+        return res.status(500).json({
+          success: false,
+          message: "Video upload failed. Video has been removed. Please try creating the video again."
+        })
+      }
+      
+      return res.status(400).json({
+        success: false,
+        message: "No video file provided"
+      })
+    }
+    
+    // Update video with video URL and duration
+    video.videoUrl = uploads.videoFile.url.trim()
+    video.duration = uploads.videoFile.duration || video.duration || 0
+    
+    // Update thumbnail if provided
+    if (uploads.thumbnail) {
+      video.thumbnail = uploads.thumbnail.url.trim()
+    }
+    
+    // Update status if all required fields are present
+    if (video.title && video.description && video.videoUrl && video.thumbnail) {
+      video.status = 'published'
+    }
+    
+    await video.save()
+    
+    return res.json({
+      success: true,
+      video,
+      fileUploads,
+      message: "Video uploaded successfully"
+    })
+  } catch (error) {
+    console.error("Upload main video error:", error)
+    
+    // Rollback: Delete video if it was created and video upload failed
+    if (videoToRollback && videoToRollback.status === 'processing' && !videoToRollback.videoUrl) {
+      try {
+        console.log('Rolling back video creation due to error:', videoToRollback._id)
+        await Video.findByIdAndDelete(videoToRollback._id)
+        
+        return res.status(500).json({
+          success: false,
+          message: "Video upload failed. Video has been removed. Please try creating the video again."
+        })
+      } catch (rollbackError) {
+        console.error('Error during rollback:', rollbackError)
+        return res.status(500).json({
+          success: false,
+          message: "Video upload failed and rollback failed. Please contact support."
+        })
+      }
+    }
+    
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    })
+  }
+}
+
+// Step 3: Upload media assets
+export const uploadVideoMediaAssets = async (req, res) => {
+  try {
+    const user = req.user
+    const uploads = req.uploads || {}
+    const fileUploads = req.fileUploads || []
+    const { videoId } = req.params
+    
+    // Find video and verify ownership
+    const video = await Video.findById(videoId).populate('channel')
+    
+    if (!video) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Video not found" 
+      })
+    }
+    
+    // Check if user owns the channel (or is admin)
+    if (video.channel.owner.toString() !== user._id.toString() && user.role !== 'admin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: "You don't have permission to modify this video" 
+      })
+    }
+    
+    // Update media assets
+    video.mediaAssets = {
+      verticalBanner: uploads.verticalBanner?.url || video.mediaAssets?.verticalBanner || '',
+      horizontalBanner: uploads.horizontalBanner?.url || video.mediaAssets?.horizontalBanner || '',
+      trailer: uploads.trailer?.url || video.mediaAssets?.trailer || ''
+    }
+    
+    // Update thumbnail if provided
+    if (uploads.thumbnail) {
+      video.thumbnail = uploads.thumbnail.url.trim()
+    }
+    
+    // Update status if this completes the video
+    if (video.status === 'processing' && video.videoUrl && video.thumbnail) {
+      video.status = 'published'
+    }
+    
+    await video.save()
+    
+    return res.json({ 
+      success: true, 
+      video,
+      fileUploads,
+      message: "Media assets uploaded successfully"
+    })
+  } catch (error) {
+    console.error("Upload video media assets error:", error)
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    })
   }
 }

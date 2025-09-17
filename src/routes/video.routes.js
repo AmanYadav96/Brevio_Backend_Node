@@ -8,6 +8,9 @@ import {
 } from "../middlewares/dbOptimization.middleware.js"
 import {
   createVideo,
+  createVideoBasic,
+  uploadMainVideo,
+  uploadVideoMediaAssets,
   getAllVideos,
   getVideo,
   updateVideo,
@@ -53,6 +56,25 @@ router.post("/",
   protect, 
   cacheInvalidationMiddleware({ patterns: ['video'], cacheTypes: ['videos', 'api'] }),
   createVideo
+)
+
+// New three-step video upload process
+router.post("/basic", 
+  protect, 
+  cacheInvalidationMiddleware({ patterns: ['video'], cacheTypes: ['videos', 'api'] }),
+  createVideoBasic
+)
+router.post("/:videoId/upload-video", 
+  protect, 
+  handleUpload,
+  cacheInvalidationMiddleware({ patterns: ['video'], cacheTypes: ['videos', 'api'] }),
+  uploadMainVideo
+)
+router.post("/:videoId/upload-media-assets", 
+  protect, 
+  handleUpload,
+  cacheInvalidationMiddleware({ patterns: ['video'], cacheTypes: ['videos', 'api'] }),
+  uploadVideoMediaAssets
 )
 router.put("/:id", 
   protect, 

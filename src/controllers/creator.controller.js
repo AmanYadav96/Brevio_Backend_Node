@@ -296,19 +296,20 @@ export const getCreatorStats = async (req, res) => {
  */
 export const getCreatorProfileById = async (req, res) => {
   try {
-    const { creatorId } = req.params;
+    const { creatorId, userId } = req.params;
+    const targetId = creatorId || userId;
     
     // Check if translation to Spanish is needed
     const translateToSpanish = shouldTranslateToSpanish(req);
     
     // Validate MongoDB ObjectId
-    if (!mongoose.Types.ObjectId.isValid(creatorId)) {
+    if (!mongoose.Types.ObjectId.isValid(targetId)) {
       throw new AppError('Invalid creator ID', 400);
     }
     
     // Find creator by ID - use lean() for better performance
     const creator = await User.findOne({ 
-      _id: creatorId, 
+      _id: targetId, 
       role: UserRole.CREATOR 
     }).select('_id name username bio profilePicture createdAt').lean();
     
@@ -328,7 +329,7 @@ export const getCreatorProfileById = async (req, res) => {
     
     // Get content IDs first (more efficient)
     const contentIds = await CreatorContent.find({ 
-      creator: creatorId,
+      creator: targetId,
       status: 'published'
     }).select('_id').lean();
     
@@ -337,7 +338,7 @@ export const getCreatorProfileById = async (req, res) => {
     // Run queries in parallel for better performance
     const [content, totalContent, subscribers, totalLikes, totalViews] = await Promise.all([
       CreatorContent.find({ 
-        creator: creatorId,
+        creator: targetId,
         status: 'published'
       })
         .select('_id title contentType mediaAssets.thumbnail views likes createdAt ageRating genre')
@@ -360,31 +361,91 @@ export const getCreatorProfileById = async (req, res) => {
       }),
       
       CreatorContent.aggregate([
-        { $match: { creator: new mongoose.Types.ObjectId(creatorId) } },
+        { $match: { creator: new mongoose.Types.ObjectId(targetId) } },
         { $group: { _id: null, totalViews: { $sum: "$views" } } }
       ])
     ]);
     
-    // Format content
+    // Format content according to frontend expectations
     const formattedContent = content.map(item => ({
+      _id: item._id,
       id: item._id,
       title: item.title,
       contentType: item.contentType,
-      thumbnail: item.mediaAssets?.thumbnail || '',
       views: item.views || 0,
       likes: item.likes || 0,
+      likesCount: item.likes || 0,
+      commentsCount: 0, // TODO: Add comments count when available
       createdAt: item.createdAt,
       ageRating: item.ageRating || null,
-      genre: item.genre || null
+      genre: item.genre || null,
+      status: 'approved', // Default status for published content
+      isPaid: false, // TODO: Add paid status when available
+      duration: '0:00', // TODO: Add duration when available
+      category: 'shortFilms', // Default category
+      year: item.createdAt ? new Date(item.createdAt).getFullYear().toString() : '2024',
+      createdAtYear: item.createdAt ? new Date(item.createdAt).getFullYear().toString() : null,
+      mediaAssets: {
+        thumbnail: item.mediaAssets?.thumbnail || '',
+        videoUrl: item.mediaAssets?.videoUrl || ''
+      },
+      mediasset: {
+        thumbnail: item.mediaAssets?.thumbnail || '',
+        videoUrl: item.mediaAssets?.videoUrl || '',
+        thumbnailUrl: item.mediaAssets?.thumbnail || '',
+        contentUrl: item.mediaAssets?.videoUrl || ''
+      },
+      thumbnail: item.mediaAssets?.thumbnail || '',
+      thumbnailUrl: item.mediaAssets?.thumbnail || '',
+      videoUrl: item.mediaAssets?.videoUrl || '',
+      contentUrl: item.mediaAssets?.videoUrl || ''
     }));
     
     // Transform URLs in the response
     const transformedContent = transformAllUrls(formattedContent);
     
+    // Format response according to frontend expectations
+    const responseData = {
+      _id: creator._id,
+      id: creator._id,
+      name: creator.name,
+      username: creator.username,
+      bio: creator.bio,
+      profilePicture: creator.profilePicture,
+      avatar: creator.profilePicture, // Alias for profilePicture
+      backgroundImage: creator.profilePicture, // Use profile picture as background fallback
+      createdAt: creator.createdAt,
+      joinedDate: creator.createdAt,
+      isTopCreator: false, // TODO: Add logic for top creator status
+      channel: channel || null,
+      stats: {
+        totalLikesReceived: totalLikes,
+        channelSubscribers: subscribers,
+        totalContentUploaded: totalContent,
+        // Legacy format for backward compatibility
+        posts: totalContent,
+        followers: subscribers,
+        likes: totalLikes,
+        views: totalViews.length > 0 ? totalViews[0].totalViews : 0,
+        // Additional stats for comprehensive API
+        engagement: {
+          totalLikes: totalLikes,
+          subscribers: subscribers
+        },
+        content: {
+          total: totalContent,
+          published: totalContent
+        }
+      },
+      uploadedContent: transformedContent
+    };
+    
     return res.json({
       success: true,
+      data: transformAllUrls(responseData), // Main data object for comprehensive API
+      // Legacy format for backward compatibility
       profile: transformAllUrls({
-        id: creator._id,  // This is where the ObjectId is being passed
+        id: creator._id,
         name: creator.name,
         username: creator.username,
         bio: creator.bio,
@@ -399,6 +460,11 @@ export const getCreatorProfileById = async (req, res) => {
         }
       }),
       content: transformedContent,
+      stats: {
+        totalLikesReceived: totalLikes,
+        channelSubscribers: subscribers,
+        totalContentUploaded: totalContent
+      },
       pagination: {
         total: totalContent,
         pages: Math.ceil(totalContent / limit),

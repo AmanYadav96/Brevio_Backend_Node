@@ -7,7 +7,8 @@ import {
   appleAuth,
   becomeCreator,
   verifyEmail,
-  resendVerificationOTP
+  resendVerificationOTP,
+  resendOTP
 } from "../controllers/auth.controller.js";
 import { protect } from "../middlewares/auth.middleware.js";
 
@@ -20,6 +21,7 @@ router.post("/login", login);
 // Email verification
 router.post("/verify-email", verifyEmail);
 router.post("/resend-verification", resendVerificationOTP);
+router.post("/resend-otp", resendOTP);
 
 // Social authentication
 router.post("/google", googleLogin);

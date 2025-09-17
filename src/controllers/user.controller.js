@@ -146,6 +146,11 @@ export const updateUserProfile = async (req, res) => {
         updates.profilePicture = req.uploads.profilePicture.url;
       }
       
+      // Handle avatar field (alias for profilePicture)
+      if (req.uploads.avatar) {
+        updates.profilePicture = req.uploads.avatar.url;
+      }
+      
       if (req.uploads.coverPhoto) {
         updates.coverPhoto = req.uploads.coverPhoto.url;
       }
@@ -234,7 +239,10 @@ export const getComprehensiveProfile = async (req, res) => {
         totalLikes: 0,
         totalComments: 0,
         totalSaves: 0,
-        channelSubscribers: 0
+        channelSubscribers: 0,
+        totalLikesReceived: 0,
+        totalSubscribers: 0,
+        totalContentUploaded: 0
       },
       activity: {
         likedContent: [],
@@ -246,11 +254,13 @@ export const getComprehensiveProfile = async (req, res) => {
 
     // Get user's regular content
     const content = await Content.find({ creator: userId })
+      .populate('genres', 'name nameEs description descriptionEs type isActive')
       .sort({ createdAt: -1 })
       .lean()
 
     profileData.content = content.map(item => transformAllUrls(item))
     profileData.stats.totalContent = content.length
+    profileData.stats.totalContentUploaded += content.length
 
     // If user is a creator, get their creator content and channel
     if (user.role === UserRole.CREATOR) {
@@ -266,6 +276,7 @@ export const getComprehensiveProfile = async (req, res) => {
 
       // Get creator's content
       const creatorContent = await CreatorContent.find({ creator: userId })
+        .populate('genre', 'name nameEs description descriptionEs type isActive')
         .sort({ createdAt: -1 })
         .lean()
 
@@ -276,6 +287,7 @@ export const getComprehensiveProfile = async (req, res) => {
       profileData.stats.draftContent = creatorContent.filter(c => c.status === 'draft').length
       profileData.stats.totalViews = creatorContent.reduce((sum, c) => sum + (c.views || 0), 0)
       profileData.stats.totalLikes = creatorContent.reduce((sum, c) => sum + (c.likes || 0), 0)
+      profileData.stats.totalContentUploaded += creatorContent.length
 
       // Get total comments on creator's content
       const contentIds = creatorContent.map(c => c._id)
@@ -286,6 +298,24 @@ export const getComprehensiveProfile = async (req, res) => {
           status: 'active'
         })
         profileData.stats.totalComments = totalComments
+      }
+
+      // Get total likes received on all creator content
+      if (contentIds.length > 0) {
+        const totalLikesReceived = await Like.countDocuments({
+          contentType: 'CreatorContent',
+          contentId: { $in: contentIds }
+        })
+        profileData.stats.totalLikesReceived = totalLikesReceived
+      }
+
+      // Get total subscribers to user's channel
+      if (channel) {
+        const totalSubscribers = await ChannelSubscription.countDocuments({
+          channel: channel._id
+        })
+        profileData.stats.totalSubscribers = totalSubscribers
+        profileData.stats.channelSubscribers = totalSubscribers
       }
     }
 
@@ -324,6 +354,16 @@ export const getComprehensiveProfile = async (req, res) => {
 
     // Update activity stats
     profileData.stats.totalSaves = savedContent.length
+
+    // For non-creator users, also calculate likes received on regular content
+    if (user.role !== UserRole.CREATOR && content.length > 0) {
+      const regularContentIds = content.map(c => c._id)
+      const totalLikesReceived = await Like.countDocuments({
+        contentType: 'Content',
+        contentId: { $in: regularContentIds }
+      })
+      profileData.stats.totalLikesReceived = totalLikesReceived
+    }
 
     return res.json(profileData)
   } catch (error) {
@@ -461,110 +501,277 @@ export const getUserStats = async (req, res) => {
 
 // Delete user account (for the user themselves)
 export const deleteUserAccount = async (req, res) => {
+  const startTime = Date.now();
+  console.log("=== DELETE ACCOUNT API STARTED ===");
+  console.log("Timestamp:", new Date().toISOString());
+  console.log("Request IP:", req.ip || req.connection.remoteAddress);
+  console.log("User Agent:", req.get('User-Agent'));
   console.log("Starting deleteUserAccount for user:", req.user._id);
+  console.log("User details:", {
+    id: req.user._id,
+    email: req.user.email,
+    name: req.user.name,
+    role: req.user.role,
+    isActive: req.user.isActive
+  });
+  
   try {
     const userId = req.user._id; // Get the authenticated user's ID
     console.log("User ID for deletion:", userId);
+    console.log("Validating user ID format...");
     
-    // Get user data for email
-    const user = await User.findById(userId);
-    if (!user) {
-      throw new AppError("User not found", 404);
+    if (!userId) {
+      console.error("ERROR: No user ID found in request");
+      throw new AppError("User authentication failed", 401);
     }
     
+    // Get user data for email
+    console.log("Fetching user data from database...");
+    const user = await User.findById(userId);
+    if (!user) {
+      console.error("ERROR: User not found in database with ID:", userId);
+      throw new AppError("User not found", 404);
+    }
+    console.log("User found successfully:", {
+      id: user._id,
+      email: user.email,
+      name: user.name,
+      createdAt: user.createdAt,
+      isActive: user.isActive
+    });
+    
     // Start a session for transaction
-    console.log("Attempting to start MongoDB session");
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    console.log("Transaction started successfully");
+    console.log("Attempting to start MongoDB session...");
+    let session;
+    try {
+      session = await mongoose.startSession();
+      console.log("MongoDB session created successfully");
+      session.startTransaction();
+      console.log("Transaction started successfully");
+    } catch (sessionError) {
+      console.error("ERROR: Failed to start MongoDB session:", sessionError);
+      throw new AppError("Database transaction failed to start", 500);
+    }
     
     try {
       console.log("Beginning deletion of user-related data");
       
       // Send account deleted email
+      console.log("=== EMAIL NOTIFICATION STEP ===");
       try {
-        // Fix: Use EmailService directly instead of new EmailService()
         console.log("Attempting to send account deleted email to:", user.email);
-        const emailResult = await EmailService.sendAccountDeletedEmail({
-          to: user.email,
-          name: user.name
-        });
-        console.log("Account deleted email sent to user:", emailResult.messageId);
+        console.log("Email service configuration check...");
+        
+        if (!user.email) {
+          console.warn("WARNING: User has no email address, skipping email notification");
+        } else {
+          const emailResult = await EmailService.sendAccountDeletedEmail({
+            to: user.email,
+            name: user.name
+          });
+          console.log("✅ Account deleted email sent successfully:", {
+            messageId: emailResult.messageId,
+            recipient: user.email,
+            timestamp: new Date().toISOString()
+          });
+        }
       } catch (emailError) {
-        console.error("Error sending account deleted email:", emailError);
-        // Log more detailed error information
-        console.error("Error details:", JSON.stringify(emailError, null, 2));
-        // Continue with deletion even if email fails
+        console.error("❌ ERROR: Failed to send account deleted email:", {
+          error: emailError.message,
+          stack: emailError.stack,
+          recipient: user.email,
+          timestamp: new Date().toISOString()
+        });
+        console.error("Email error details:", JSON.stringify(emailError, Object.getOwnPropertyNames(emailError), 2));
+        console.log("⚠️  Continuing with account deletion despite email failure...");
       }
       
       // Execute deletions sequentially instead of using Promise.all
-      // Delete user's saved content
-      const savedResult = await Save.deleteMany({ user: userId }, { session });
-      console.log(`Deleted ${savedResult.deletedCount} saved items`);
+      console.log("=== DATA DELETION PHASE ===");
+      const deletionResults = {};
       
-      // Delete user's likes
-      const likesResult = await Like.deleteMany({ user: userId }, { session });
-      console.log(`Deleted ${likesResult.deletedCount} likes`);
+      try {
+        // Delete user's saved content
+        console.log("🗑️  Deleting saved content...");
+        const savedResult = await Save.deleteMany({ user: userId }, { session });
+        deletionResults.savedItems = savedResult.deletedCount;
+        console.log(`✅ Deleted ${savedResult.deletedCount} saved items`);
+      } catch (error) {
+        console.error("❌ ERROR deleting saved content:", error.message);
+        throw error;
+      }
       
-      // Delete user's comments
-      const commentsResult = await Comment.deleteMany({ user: userId }, { session });
-      console.log(`Deleted ${commentsResult.deletedCount} comments`);
+      try {
+        // Delete user's likes
+        console.log("🗑️  Deleting likes...");
+        const likesResult = await Like.deleteMany({ user: userId }, { session });
+        deletionResults.likes = likesResult.deletedCount;
+        console.log(`✅ Deleted ${likesResult.deletedCount} likes`);
+      } catch (error) {
+        console.error("❌ ERROR deleting likes:", error.message);
+        throw error;
+      }
       
-      // Delete user's channel subscriptions
-      const subscriptionsResult = await ChannelSubscription.deleteMany({ user: userId }, { session });
-      console.log(`Deleted ${subscriptionsResult.deletedCount} channel subscriptions`);
+      try {
+        // Delete user's comments
+        console.log("🗑️  Deleting comments...");
+        const commentsResult = await Comment.deleteMany({ user: userId }, { session });
+        deletionResults.comments = commentsResult.deletedCount;
+        console.log(`✅ Deleted ${commentsResult.deletedCount} comments`);
+      } catch (error) {
+        console.error("❌ ERROR deleting comments:", error.message);
+        throw error;
+      }
       
-      // Delete user's video views
-      const viewsResult = await VideoView.deleteMany({ viewer: userId }, { session });
-      console.log(`Deleted ${viewsResult.deletedCount} video views`);
+      try {
+        // Delete user's channel subscriptions
+        console.log("🗑️  Deleting channel subscriptions...");
+        const subscriptionsResult = await ChannelSubscription.deleteMany({ user: userId }, { session });
+        deletionResults.subscriptions = subscriptionsResult.deletedCount;
+        console.log(`✅ Deleted ${subscriptionsResult.deletedCount} channel subscriptions`);
+      } catch (error) {
+        console.error("❌ ERROR deleting channel subscriptions:", error.message);
+        throw error;
+      }
       
-      // Delete user's donations
-      const donationsResult = await Donation.deleteMany({ userId: userId }, { session });
-      console.log(`Deleted ${donationsResult.deletedCount} donations`);
+      try {
+        // Delete user's video views
+        console.log("🗑️  Deleting video views...");
+        const viewsResult = await VideoView.deleteMany({ viewer: userId }, { session });
+        deletionResults.videoViews = viewsResult.deletedCount;
+        console.log(`✅ Deleted ${viewsResult.deletedCount} video views`);
+      } catch (error) {
+        console.error("❌ ERROR deleting video views:", error.message);
+        throw error;
+      }
       
-      // Delete user's reports
-      const reportsResult = await Report.deleteMany({ reporterId: userId }, { session });
-      console.log(`Deleted ${reportsResult.deletedCount} reports`);
+      try {
+        // Delete user's donations
+        console.log("🗑️  Deleting donations...");
+        const donationsResult = await Donation.deleteMany({ userId: userId }, { session });
+        deletionResults.donations = donationsResult.deletedCount;
+        console.log(`✅ Deleted ${donationsResult.deletedCount} donations`);
+      } catch (error) {
+        console.error("❌ ERROR deleting donations:", error.message);
+        throw error;
+      }
       
-      console.log("All related data deletion completed");
+      try {
+        // Delete user's reports
+        console.log("🗑️  Deleting reports...");
+        const reportsResult = await Report.deleteMany({ reporterId: userId }, { session });
+        deletionResults.reports = reportsResult.deletedCount;
+        console.log(`✅ Deleted ${reportsResult.deletedCount} reports`);
+      } catch (error) {
+        console.error("❌ ERROR deleting reports:", error.message);
+        throw error;
+      }
+      
+      console.log("✅ All related data deletion completed successfully:", deletionResults);
       
       // Finally, delete the user
-      console.log("Attempting to delete user document");
-      const deletedUser = await User.findByIdAndDelete(userId).session(session);
+      console.log("=== USER DOCUMENT DELETION ===");
+      console.log("Attempting to delete user document with ID:", userId);
       
-      if (!deletedUser) {
-        console.log("User not found for deletion");
-        throw new AppError("User not found", 404);
+      try {
+        const deletedUser = await User.findByIdAndDelete(userId).session(session);
+        
+        if (!deletedUser) {
+          console.error("❌ ERROR: User document not found for deletion");
+          throw new AppError("User not found", 404);
+        }
+        
+        console.log("✅ User document deleted successfully:", {
+          deletedUserId: deletedUser._id,
+          deletedUserEmail: deletedUser.email,
+          deletedUserName: deletedUser.name
+        });
+      } catch (userDeletionError) {
+        console.error("❌ ERROR deleting user document:", userDeletionError.message);
+        throw userDeletionError;
       }
-      console.log("User document deleted successfully:", deletedUser._id);
       
       // Commit the transaction
-      console.log("Committing transaction");
-      await session.commitTransaction();
-      console.log("Transaction committed successfully");
-      session.endSession();
+      console.log("=== TRANSACTION COMMIT ===");
+      console.log("Committing transaction...");
       
-      console.log("User account deletion completed successfully");
+      try {
+        await session.commitTransaction();
+        console.log("✅ Transaction committed successfully");
+      } catch (commitError) {
+        console.error("❌ ERROR committing transaction:", commitError.message);
+        throw commitError;
+      } finally {
+        session.endSession();
+        console.log("📝 Database session ended");
+      }
+      
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      
+      console.log("=== DELETE ACCOUNT API COMPLETED SUCCESSFULLY ===");
+      console.log("✅ User account deletion completed successfully");
+      console.log("⏱️  Total execution time:", duration, "ms");
+      console.log("📊 Final deletion summary:", deletionResults);
+      
       return res.json({
         success: true,
         message: "Your account has been deleted successfully"
       });
     } catch (error) {
       // Abort transaction on error
-      console.error("Error in transaction, aborting:", error);
+      console.log("=== TRANSACTION ROLLBACK ===");
+      console.error("❌ ERROR in transaction, aborting:", {
+        error: error.message,
+        type: error.constructor.name,
+        timestamp: new Date().toISOString()
+      });
       console.error("Error stack:", error.stack);
-      await session.abortTransaction();
-      session.endSession();
+      
+      try {
+        if (session) {
+          await session.abortTransaction();
+          console.log("🔄 Transaction aborted successfully");
+          session.endSession();
+          console.log("📝 Database session ended after rollback");
+        }
+      } catch (rollbackError) {
+        console.error("❌ ERROR during transaction rollback:", rollbackError.message);
+      }
+      
       throw error;
     }
   } catch (error) {
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    
+    console.log("=== DELETE ACCOUNT API FAILED ===");
+    console.error("❌ Delete user account operation failed");
+    console.error("⏱️  Execution time before failure:", duration, "ms");
+    
     if (error instanceof AppError) {
-      console.error("AppError in deleteUserAccount:", error.message, error.statusCode);
-      return res.status(error.statusCode).json({ success: false, message: error.message });
+      console.error("🚫 AppError in deleteUserAccount:", {
+        message: error.message,
+        statusCode: error.statusCode,
+        timestamp: new Date().toISOString()
+      });
+      return res.status(error.statusCode).json({ 
+        success: false, 
+        message: error.message 
+      });
     }
-    console.error("Delete user account error:", error);
-    console.error("Error details:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    
+    console.error("💥 Unexpected error in deleteUserAccount:", {
+      message: error.message,
+      type: error.constructor.name,
+      timestamp: new Date().toISOString()
+    });
+    console.error("Error details:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
     console.error("Error stack:", error.stack);
-    return res.status(500).json({ success: false, message: "Failed to delete your account" });
+    
+    return res.status(500).json({ 
+      success: false, 
+      message: "Failed to delete your account" 
+    });
   }
 };

@@ -63,7 +63,7 @@ otpSchema.statics.verifyOTP = async function(email, code, purpose) {
   try {
     const currentDate = new Date();
     
-    // First find all matching OTPs without date filter (remove .lean() to get Mongoose documents)
+    // Find all matching OTPs without date filter
     const otps = await this.find({
       email: email,
       purpose: purpose,
@@ -80,14 +80,21 @@ otpSchema.statics.verifyOTP = async function(email, code, purpose) {
       return { valid: false, message: "Invalid or expired OTP" }
     }
     
-    const otp = validOtps[0];
-
-    // Check if the provided code matches
-    if (otp.code !== code) {
-      return { valid: false, message: "Invalid OTP code" }
+    // Find the OTP that matches the provided code
+    let matchingOtp = null;
+    for (const otp of validOtps) {
+      if (otp.code === code) {
+        matchingOtp = otp;
+        break;
+      }
     }
 
-    return { valid: true, otp }
+    // Check if we found a matching OTP
+    if (!matchingOtp) {
+      return { valid: false, message: "Invalid OTP code" }
+    }
+    
+    return { valid: true, otp: matchingOtp }
   } catch (error) {
     console.error('OTP verification error:', error);
     return { valid: false, message: "Error verifying OTP" }

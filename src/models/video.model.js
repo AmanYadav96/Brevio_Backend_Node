@@ -19,11 +19,11 @@ const videoSchema = new mongoose.Schema(
     },
     thumbnail: {
       type: String,
-      required: [true, "Video thumbnail is required"]
+      default: ""
     },
     videoUrl: {
       type: String,
-      required: [true, "Video URL is required"]
+      default: ""
     },
     duration: {
       type: Number,

@@ -544,3 +544,85 @@ export const resendVerificationOTP = async (req, res) => {
     });
   }
 };
+
+/**
+ * Resend OTP for various purposes (email verification, password reset, etc.)
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+export const resendOTP = async (req, res) => {
+  try {
+    const { email, purpose } = req.body;
+
+    // Validate required fields
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+
+    if (!purpose) {
+      return res.status(400).json({
+        success: false,
+        message: 'Purpose is required'
+      });
+    }
+
+    // Validate purpose
+    const validPurposes = ['email_verification', 'password_reset'];
+    if (!validPurposes.includes(purpose)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid purpose. Valid purposes are: ' + validPurposes.join(', ')
+      });
+    }
+
+    // Check if user exists
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No user found with this email'
+      });
+    }
+
+    // Additional validation for email verification
+    if (purpose === 'email_verification') {
+      if (user.status === UserStatus.ACTIVE && user.isEmailVerified) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email is already verified'
+        });
+      }
+    }
+
+    // Generate OTP
+    const otp = await OTP.generateOTP(email, purpose);
+
+    // Send OTP email
+    await emailService.sendOtpEmail({
+      to: email,
+      name: user.name,
+      otp: otp.code,
+      purpose: purpose
+    });
+
+    // Prepare response message based on purpose
+    const messages = {
+      'email_verification': 'Email verification OTP resent to your email',
+      'password_reset': 'Password reset OTP resent to your email'
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: messages[purpose]
+    });
+  } catch (error) {
+    console.error('Resend OTP error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to resend OTP'
+    });
+  }
+};

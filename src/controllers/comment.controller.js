@@ -50,7 +50,7 @@ export const createComment = async (req, res) => {
     await comment.save()
     
     // Populate user info
-    await comment.populate('user', 'name profilePicture')
+    await comment.populate('user', '_id name profilePicture role')
     
     return res.json({
       success: true,
@@ -91,19 +91,38 @@ export const getComments = async (req, res) => {
       status: 'active'
     })
       .sort({ createdAt: -1 })
-      .populate('user', 'name profilePicture')
+      .populate('user', '_id name profilePicture role')
       .populate({
         path: 'replies',
         match: { status: 'active' },
         options: { sort: { createdAt: 1 } },
-        populate: { path: 'user', select: 'name profilePicture' }
+        populate: { path: 'user', select: '_id name profilePicture role' }
       })
     
     console.log(`Found ${comments.length} comments`)
     
+    // Transform _id to userId for all comments and replies
+    const transformedComments = comments.map(comment => {
+      const commentObj = comment.toObject()
+      if (commentObj.user && commentObj.user._id) {
+        commentObj.user.userId = commentObj.user._id
+        delete commentObj.user._id
+      }
+      if (commentObj.replies && commentObj.replies.length > 0) {
+        commentObj.replies = commentObj.replies.map(reply => {
+          if (reply.user && reply.user._id) {
+            reply.user.userId = reply.user._id
+            delete reply.user._id
+          }
+          return reply
+        })
+      }
+      return commentObj
+    })
+    
     return res.json({
       success: true,
-      comments
+      comments: transformedComments
     })
   } catch (error) {
     console.error('Get comments error:', error)
@@ -144,6 +163,9 @@ export const updateComment = async (req, res) => {
     // Update the comment
     comment.text = text
     await comment.save()
+    
+    // Populate user info
+    await comment.populate('user', '_id name profilePicture role')
     
     return res.json({
       success: true,

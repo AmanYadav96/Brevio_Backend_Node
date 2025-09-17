@@ -257,6 +257,10 @@ const server = http.createServer({
   headersTimeout: 300000*20, // 5 minutes + 5 seconds
 }, app);
 
+// Initialize Socket.IO with the HTTP server
+socketService.initialize(server);
+console.log('Socket.IO service initialized');
+
 // Use this server instead of app.listen
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
