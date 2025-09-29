@@ -118,14 +118,8 @@ const userSchema = new mongoose.Schema(
   }
 )
 
-// Make username required for creators
-// Make username required for creators
-userSchema.pre("validate", function(next) {
-  if (this.role === UserRole.CREATOR && !this.username) {
-    this.invalidate('username', 'Username is required for creators')
-  }
-  next()
-})
+// Username validation removed to allow Google login without username
+// Users can set username later if they become creators
 
 // Hash password before saving
 userSchema.pre("save", async function (next) {

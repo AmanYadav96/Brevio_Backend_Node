@@ -3,6 +3,7 @@ import Payment, { PaymentType, PaymentStatus } from '../models/payment.model.js'
 import Donation from '../models/donation.model.js';
 import User, { UserRole } from '../models/user.model.js';
 import Like from '../models/like.model.js';
+import Comment from '../models/comment.model.js';
 import { AppError } from '../utils/app-error.js';
 import mongoose from 'mongoose';
 import Channel from '../models/channel.model.js';
@@ -343,7 +344,7 @@ export const getCreatorProfileById = async (req, res) => {
         status: 'published',
         adminApproved: true
       })
-        .select('_id title contentType mediaAssets.thumbnail views likes createdAt ageRating genre')
+        .select('_id title description contentType orientation videoUrl duration mediaAssets views likes createdAt updatedAt ageRating genre tags status isActive releaseYear videoMetadata adminApproved rejectionReason seasons lessons pricing')
         .populate('genre', 'name nameEs')
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -368,39 +369,77 @@ export const getCreatorProfileById = async (req, res) => {
       ])
     ]);
     
+    // Get likes and comments count for each content item
+    const contentWithCounts = await Promise.all(
+      content.map(async (item) => {
+        const [likesCount, commentsCount] = await Promise.all([
+          Like.countDocuments({
+            contentType: 'creatorContent',
+            contentId: item._id
+          }),
+          Comment.countDocuments({
+            contentType: 'creatorContent',
+            contentId: item._id,
+            status: 'active'
+          })
+        ]);
+        
+        return {
+          ...item,
+          actualLikesCount: likesCount,
+          actualCommentsCount: commentsCount
+        };
+      })
+    );
+    
     // Format content according to frontend expectations
-    const formattedContent = content.map(item => ({
+    const formattedContent = contentWithCounts.map(item => ({
       _id: item._id,
       id: item._id,
       title: item.title,
+      description: item.description,
       contentType: item.contentType,
+      orientation: item.orientation,
+      creator: item.creator,
+      videoUrl: item.videoUrl || item.mediaAssets?.videoUrl || '',
+      duration: item.duration || 0,
       views: item.views || 0,
-      likes: item.likes || 0,
-      likesCount: item.likes || 0,
-      commentsCount: 0, // TODO: Add comments count when available
+      likes: item.actualLikesCount || 0,
+      likesCount: item.actualLikesCount || 0,
+      commentsCount: item.actualCommentsCount || 0,
       createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
       ageRating: item.ageRating || null,
       genre: item.genre || null,
+      tags: item.tags || [],
       status: 'approved', // Default status for published content
-      isPaid: false, // TODO: Add paid status when available
-      duration: '0:00', // TODO: Add duration when available
+      isActive: item.isActive,
+      isPaid: item.pricing?.model === 'paid' || false,
+      releaseYear: item.releaseYear,
       category: 'shortFilms', // Default category
       year: item.createdAt ? new Date(item.createdAt).getFullYear().toString() : '2024',
       createdAtYear: item.createdAt ? new Date(item.createdAt).getFullYear().toString() : null,
+      videoMetadata: item.videoMetadata || null,
+      adminApproved: item.adminApproved,
+      rejectionReason: item.rejectionReason || null,
+      seasons: item.seasons || [],
+      lessons: item.lessons || [],
+      pricing: item.pricing || null,
       mediaAssets: {
         thumbnail: item.mediaAssets?.thumbnail || '',
-        videoUrl: item.mediaAssets?.videoUrl || ''
-      },
-      mediasset: {
-        thumbnail: item.mediaAssets?.thumbnail || '',
-        videoUrl: item.mediaAssets?.videoUrl || '',
         thumbnailUrl: item.mediaAssets?.thumbnail || '',
-        contentUrl: item.mediaAssets?.videoUrl || ''
+        videoUrl: item.mediaAssets?.videoUrl || item.videoUrl || '',
+        contentUrl: item.mediaAssets?.videoUrl || item.videoUrl || '',
+        verticalBanner: item.mediaAssets?.verticalBanner || '',
+        horizontalBanner: item.mediaAssets?.horizontalBanner || '',
+        trailer: item.mediaAssets?.trailer || '',
+        trailerDuration: item.mediaAssets?.trailerDuration || 0
       },
+      // Legacy fields for backward compatibility
       thumbnail: item.mediaAssets?.thumbnail || '',
       thumbnailUrl: item.mediaAssets?.thumbnail || '',
-      videoUrl: item.mediaAssets?.videoUrl || '',
-      contentUrl: item.mediaAssets?.videoUrl || ''
+      videoUrl: item.mediaAssets?.videoUrl || item.videoUrl || '',
+      contentUrl: item.mediaAssets?.videoUrl || item.videoUrl || ''
     }));
     
     // Transform URLs in the response
@@ -713,6 +752,69 @@ export const searchCreators = async (req, res) => {
     return res.status(error.statusCode || 500).json({ 
       success: false, 
       message: error.message || 'Failed to search creators' 
+    });
+  }
+};
+
+// Delete content (only short films allowed)
+export const deleteContent = async (req, res) => {
+  try {
+    const { contentId } = req.params;
+    const userId = req.user._id;
+
+    // Find the content
+    const content = await CreatorContent.findById(contentId);
+    
+    if (!content) {
+      return res.status(404).json({
+        success: false,
+        message: 'Content not found'
+      });
+    }
+
+    // Check if the user is the creator of this content
+    if (content.creator.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to delete this content'
+      });
+    }
+
+    // Check if the content is a short film
+    if (content.contentType !== 'shortFilm') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only short film content can be deleted. Series and educational content cannot be deleted.'
+      });
+    }
+
+    // Delete related data first
+    await Promise.all([
+      // Delete likes
+      Like.deleteMany({
+        contentType: 'creatorContent',
+        contentId: contentId
+      }),
+      // Delete comments
+      Comment.deleteMany({
+        contentType: 'creatorContent',
+        contentId: contentId
+      })
+    ]);
+
+    // Delete the content
+    await CreatorContent.findByIdAndDelete(contentId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Short film content deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Delete content error:', error);
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Failed to delete content'
     });
   }
 };

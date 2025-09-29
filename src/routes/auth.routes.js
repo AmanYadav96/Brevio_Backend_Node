@@ -8,7 +8,9 @@ import {
   becomeCreator,
   verifyEmail,
   resendVerificationOTP,
-  resendOTP
+  resendOTP,
+  verifyOtpResetPassword,
+  resetPasswordWithOtp
 } from "../controllers/auth.controller.js";
 import { protect } from "../middlewares/auth.middleware.js";
 
@@ -22,6 +24,8 @@ router.post("/login", login);
 router.post("/verify-email", verifyEmail);
 router.post("/resend-verification", resendVerificationOTP);
 router.post("/resend-otp", resendOTP);
+router.post("/verify-otp-reset-password", verifyOtpResetPassword);
+router.post("/reset-password-with-otp", resetPasswordWithOtp);
 
 // Social authentication
 router.post("/google", googleLogin);

@@ -626,3 +626,116 @@ export const resendOTP = async (req, res) => {
     });
   }
 };
+
+/**
+ * Verify OTP for password reset (without actually resetting the password)
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+export const verifyOtpResetPassword = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and OTP are required'
+      });
+    }
+
+    // Check if user exists
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No user found with this email'
+      });
+    }
+
+    // Verify OTP
+    const verificationResult = await OTP.verifyOTP(
+      email,
+      otp,
+      "password_reset"
+    );
+
+    if (!verificationResult.valid) {
+      return res.status(400).json({
+        success: false,
+        message: verificationResult.message
+      });
+    }
+
+    // Mark OTP as used
+    await verificationResult.otp.markAsUsed();
+
+    return res.status(200).json({
+      success: true,
+      message: 'OTP verified successfully. You can now reset your password.',
+      data: {
+        email: email,
+        otpVerified: true
+      }
+    });
+  } catch (error) {
+    console.error('Verify OTP reset password error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to verify OTP'
+    });
+  }
+};
+
+/**
+ * Reset password using OTP verification (combined endpoint)
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+export const resetPasswordWithOtp = async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    // Validate required fields
+    if (!email || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email, OTP, and new password are required'
+      });
+    }
+
+    // Validate password strength
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 8 characters long'
+      });
+    }
+
+    // Check if user exists
+    const user = await User.findOne({ email }).select('+password');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No user found with this email'
+      });
+    }
+
+    // Update password
+    user.password = newPassword;
+    await user.save();
+
+    // Mark OTP as used
+   
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password has been reset successfully'
+    });
+  } catch (error) {
+    console.error('Reset password with OTP error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to reset password'
+    });
+  }
+};

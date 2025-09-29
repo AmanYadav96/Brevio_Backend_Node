@@ -2,6 +2,7 @@ import express from 'express'
 import { 
   createPayment,
   processStripePayment,
+  createDonationPaymentIntent,
   getUserPayments,
   getCreatorPayments,
   processCreatorPayout,
@@ -20,6 +21,9 @@ router.post('/', createPayment)
 
 // Process a payment with Stripe
 router.post('/process-stripe', processStripePayment)
+
+// Create donation payment intent (combines donation creation with payment intent)
+router.post('/donation-intent', createDonationPaymentIntent)
 
 // Get user's payment history
 router.get('/user', getUserPayments)

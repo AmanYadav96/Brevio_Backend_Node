@@ -5,7 +5,8 @@ import {
   getCreatorStats,
   getCreatorProfileById,
   getCreatorOwnProfile,
-  searchCreators 
+  searchCreators,
+  deleteContent
 } from "../controllers/creator.controller.js"
 
 const router = express.Router()

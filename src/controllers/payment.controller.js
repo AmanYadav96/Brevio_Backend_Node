@@ -447,3 +447,161 @@ export const processRefund = async (req, res) => {
     return res.status(500).json(createError(500, 'Error processing refund: ' + error.message))
   }
 }
+
+// Create donation payment intent - combines donation creation with payment intent
+export const createDonationPaymentIntent = async (req, res) => {
+  try {
+    const userId = req.user._id
+    const { 
+      contentId, 
+      contentType, 
+      amount, 
+      currency = 'USD', 
+      message,
+      paymentMethodId 
+    } = req.body
+    
+    // Validate required fields
+    if (!contentId || !contentType || !amount || !paymentMethodId) {
+      return res.status(400).json(createError(400, 'Missing required fields: contentId, contentType, amount, paymentMethodId'))
+    }
+    
+    // Validate content type
+    if (!['video', 'short', 'series', 'course'].includes(contentType)) {
+      return res.status(400).json(createError(400, 'Invalid content type'))
+    }
+    
+    // Validate amount
+    if (amount < 1) {
+      return res.status(400).json(createError(400, 'Amount must be at least 1'))
+    }
+    
+    // Find the content and creator
+    let creatorId
+    
+    switch (contentType) {
+      case 'video':
+      case 'short':
+        const Video = (await import('../models/video.model.js')).default
+        const video = await Video.findById(contentId)
+        if (!video) {
+          return res.status(404).json(createError(404, 'Video not found'))
+        }
+        creatorId = video.userId
+        break
+      case 'series':
+        const Content = (await import('../models/content.model.js')).default
+        const content = await Content.findById(contentId)
+        if (!content) {
+          return res.status(404).json(createError(404, 'Series not found'))
+        }
+        creatorId = content.userId
+        break
+      case 'course':
+        const creatorContent = await CreatorContent.findById(contentId)
+        if (!creatorContent) {
+          return res.status(404).json(createError(404, 'Course not found'))
+        }
+        creatorId = creatorContent.creatorId
+        break
+    }
+    
+    // Create the donation record
+    const donation = new Donation({
+      userId,
+      contentId,
+      contentType,
+      amount,
+      currency,
+      message,
+      creatorId,
+      status: 'pending'
+    })
+    
+    await donation.save()
+    
+    // Calculate platform fee (example: 10% of the amount)
+    const platformFeePercentage = 0.1
+    const platformFee = amount * platformFeePercentage
+    const netAmount = amount - platformFee
+    
+    // Create payment record
+    const payment = new Payment({
+      userId,
+      amount,
+      currency,
+      paymentType: PaymentType.DONATION,
+      paymentMethod: PaymentMethod.STRIPE,
+      platformFee,
+      platformFeePercentage,
+      netAmount,
+      creatorId,
+      donationId: donation._id,
+      status: PaymentStatus.PENDING,
+      metadata: {
+        contentId,
+        contentType,
+        message: message || ''
+      }
+    })
+    
+    await payment.save()
+    
+    // Create Stripe payment intent
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100), // Convert to cents
+      currency: currency.toLowerCase(),
+      payment_method: paymentMethodId,
+      confirmation_method: 'manual',
+      confirm: true,
+      description: `Donation for ${contentType}: ${contentId}`,
+      metadata: {
+        paymentId: payment._id.toString(),
+        donationId: donation._id.toString(),
+        paymentType: PaymentType.DONATION,
+        contentId: contentId.toString(),
+        contentType,
+        creatorId: creatorId.toString()
+      }
+    })
+    
+    // Update payment with Stripe details
+    payment.paymentProviderId = paymentIntent.id
+    
+    // Handle payment intent status
+    if (paymentIntent.status === 'succeeded') {
+      payment.status = PaymentStatus.COMPLETED
+      donation.status = 'completed'
+      donation.paymentId = paymentIntent.id
+      await donation.save()
+    } else if (paymentIntent.status === 'requires_action') {
+      // Payment requires additional authentication
+      payment.status = PaymentStatus.PENDING
+    } else if (paymentIntent.status === 'requires_payment_method') {
+      // Payment failed
+      payment.status = PaymentStatus.FAILED
+      donation.status = 'failed'
+      await donation.save()
+    }
+    
+    await payment.save()
+    
+    return res.status(201).json({
+      success: true,
+      message: 'Donation payment intent created successfully',
+      donation,
+      payment,
+      paymentIntent: {
+        id: paymentIntent.id,
+        status: paymentIntent.status,
+        client_secret: paymentIntent.client_secret,
+        requires_action: paymentIntent.status === 'requires_action',
+        next_action: paymentIntent.next_action
+      }
+    })
+    
+  } catch (error) {
+    console.error('Error creating donation payment intent:', error)
+    return res.status(500).json(createError(500, 'Error creating donation payment intent: ' + error.message))
+  }
+}

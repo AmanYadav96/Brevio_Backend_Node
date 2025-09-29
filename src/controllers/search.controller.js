@@ -120,7 +120,7 @@ export const universalSearch = async (req, res) => {
             localField: '_id',
             foreignField: 'contentId',
             as: 'comments',
-            pipeline: [{ $match: { isActive: true } }]
+            pipeline: [{ $match: { status: 'active' } }]
           }
         },
         {
@@ -192,7 +192,7 @@ export const universalSearch = async (req, res) => {
               localField: '_id',
               foreignField: 'contentId',
               as: 'comments',
-              pipeline: [{ $match: { isActive: true } }]
+              pipeline: [{ $match: { status: 'active' } }]
             }
           },
           {
@@ -336,7 +336,7 @@ export const universalSearch = async (req, res) => {
             localField: '_id',
             foreignField: 'videoId',
             as: 'comments',
-            pipeline: [{ $match: { isActive: true } }]
+            pipeline: [{ $match: { status: 'active' } }]
           }
         },
         {

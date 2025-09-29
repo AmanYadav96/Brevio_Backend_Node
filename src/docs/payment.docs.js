@@ -194,6 +194,87 @@
  *       500:
  *         description: Server error
  *
+ * /api/payments/donation-intent:
+ *   post:
+ *     summary: Create donation payment intent (combines donation creation with Stripe payment intent)
+ *     tags: [Payments]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - contentId
+ *               - contentType
+ *               - amount
+ *               - paymentMethodId
+ *             properties:
+ *               contentId:
+ *                 type: string
+ *                 description: ID of the content being donated to
+ *               contentType:
+ *                 type: string
+ *                 enum: [video, short, series, course]
+ *                 description: Type of content being donated to
+ *               amount:
+ *                 type: number
+ *                 minimum: 1
+ *                 description: Donation amount (minimum 1)
+ *               currency:
+ *                 type: string
+ *                 default: USD
+ *                 description: Currency of the donation
+ *               message:
+ *                 type: string
+ *                 maxLength: 500
+ *                 description: Optional message from the donor
+ *               paymentMethodId:
+ *                 type: string
+ *                 description: Stripe payment method ID
+ *     responses:
+ *       201:
+ *         description: Donation payment intent created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 donation:
+ *                   $ref: '#/components/schemas/Donation'
+ *                 payment:
+ *                   $ref: '#/components/schemas/Payment'
+ *                 paymentIntent:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       description: Stripe payment intent ID
+ *                     status:
+ *                       type: string
+ *                       description: Payment intent status
+ *                     client_secret:
+ *                       type: string
+ *                       description: Client secret for confirming payment
+ *                     requires_action:
+ *                       type: boolean
+ *                       description: Whether additional authentication is required
+ *                     next_action:
+ *                       type: object
+ *                       description: Next action required for payment completion
+ *       400:
+ *         description: Invalid input or missing required fields
+ *       404:
+ *         description: Content not found
+ *       500:
+ *         description: Server error
+ *
  * /api/payments/user:
  *   get:
  *     summary: Get user's payment history
